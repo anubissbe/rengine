@@ -4128,15 +4128,21 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
 		activity_id=activity_id)
 
 	# Sanitize the cmd
-	command = cmd if shell else cmd.split()
+	if shell:
+		raise ValueError("shell=True is not allowed for security reasons.")
+
+	# Validate and sanitize the command
+	allowed_commands = ["httpx", "curl", "wget"]  # Example allowlist
+	command_parts = cmd.split()
+	if command_parts[0] not in allowed_commands:
+		raise ValueError(f"Command '{command_parts[0]}' is not allowed.")
 
 	# Run the command using subprocess
 	process = subprocess.Popen(
-		command,
+		command_parts,
 		stdout=subprocess.PIPE,
 		stderr=subprocess.STDOUT,
-		universal_newlines=True,
-		shell=shell)
+		universal_newlines=True)
 
 	# Log the output in real-time to the database
 	output = ""
