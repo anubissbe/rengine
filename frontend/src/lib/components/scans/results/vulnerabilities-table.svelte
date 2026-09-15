@@ -39,7 +39,7 @@
 	import IssueInstances from './vulnerabilities/issue-instances.svelte';
 	import SelectionBar from './table/selection-bar.svelte';
 	import RowSelectionBar from './table/row-selection-bar.svelte';
-	import LoadingButton from '$lib/components/loading-button.svelte';
+	import RescanAction from './table/rescan-action.svelte';
 	import type { SeedPick, SeedSelection } from '$lib/types/recheck';
 	import IssueRow from './vulnerabilities/issue-row.svelte';
 	import VulnRow from './vulnerabilities/vuln-row.svelte';
@@ -757,16 +757,16 @@
 		rescanBusy = false;
 	}
 
-	function rescanSelection() {
+	async function rescanSelection() {
 		const rows = pickedRows();
 		const picks = picksOf(rows);
 		if (picks.length) {
-			void run({ dimension: SurfaceDimension.VULNERABILITIES, picks }, templatesOf(rows));
+			await run({ dimension: SurfaceDimension.VULNERABILITIES, picks }, templatesOf(rows));
 		}
 	}
 
-	function rescanAllMatching() {
-		void run(querySelection(), []);
+	async function rescanAllMatching() {
+		await run(querySelection(), []);
 	}
 
 	let rescanOptionsFor = $state<{ selection: SeedSelection; templates: string[] } | null>(null);
@@ -899,6 +899,7 @@
 			{totalCapped}
 			maxAssets={rechecks.schema?.max_assets ?? 0}
 			queryActive={Boolean(query.search.trim()) || chips.length > 0}
+			query={queryLabel()}
 			busy={rescanBusy}
 			onRescanAll={rescanAllMatching}
 			onRescanAllOptions={openRescanAllOptions}
@@ -1159,17 +1160,14 @@
 				{/each}
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-		<LoadingButton
-			variant="ghost"
-			size="sm"
-			class="gap-2 font-medium"
-			loading={rescanBusy}
-			loadingLabel="Starting"
-			onclick={rescanSelection}
-		>
-			<RefreshCw class="h-3.5 w-3.5 text-muted-foreground" />
-			Rescan
-		</LoadingButton>
+		<RescanAction
+			count={checkedCount}
+			dimension={SurfaceDimension.VULNERABILITIES}
+			{noun}
+			{nounPlural}
+			busy={rescanBusy}
+			onRescan={rescanSelection}
+		/>
 		<Button variant="ghost" size="sm" class="gap-2 font-medium" onclick={openRescanOptions}>
 			<Settings2 class="h-3.5 w-3.5 text-muted-foreground" />
 			Options

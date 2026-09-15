@@ -25,7 +25,7 @@
 	import ResultsPagination from './table/results-pagination.svelte';
 	import SelectionBar from './table/selection-bar.svelte';
 	import RowSelectionBar from './table/row-selection-bar.svelte';
-	import LoadingButton from '$lib/components/loading-button.svelte';
+	import RescanAction from './table/rescan-action.svelte';
 	import { hostPort } from '$lib/utilities/net';
 	import { RowSelection } from './table/selection.svelte';
 	import type { SeedPick, SeedSelection } from '$lib/types/recheck';
@@ -504,13 +504,13 @@
 		rescanBusy = false;
 	}
 
-	function rescanSelection() {
+	async function rescanSelection() {
 		const picks = selection.rows().map(pickOf);
-		if (picks.length) void run({ dimension: SurfaceDimension.SERVICES, picks });
+		if (picks.length) await run({ dimension: SurfaceDimension.SERVICES, picks });
 	}
 
-	function rescanAllMatching() {
-		void run(querySelection());
+	async function rescanAllMatching() {
+		await run(querySelection());
 	}
 
 	let rescanOptionsFor = $state<SeedSelection | null>(null);
@@ -616,6 +616,7 @@
 			{totalCapped}
 			maxAssets={rechecks.schema?.max_assets ?? 0}
 			queryActive={Boolean(query.search.trim()) || chips.length > 0}
+			query={queryLabel()}
 			busy={rescanBusy}
 			onRescanAll={rescanAllMatching}
 			onRescanAllOptions={openRescanAllOptions}
@@ -748,17 +749,12 @@
 	onClear={() => selection.clear()}
 >
 	{#snippet actions()}
-		<LoadingButton
-			variant="ghost"
-			size="sm"
-			class="gap-2 font-medium"
-			loading={rescanBusy}
-			loadingLabel="Starting"
-			onclick={rescanSelection}
-		>
-			<RefreshCw class="h-3.5 w-3.5 text-muted-foreground" />
-			Rescan
-		</LoadingButton>
+		<RescanAction
+			count={pickedCount}
+			dimension={SurfaceDimension.SERVICES}
+			busy={rescanBusy}
+			onRescan={rescanSelection}
+		/>
 		<Button variant="ghost" size="sm" class="gap-2 font-medium" onclick={openRescanOptions}>
 			<Settings2 class="h-3.5 w-3.5 text-muted-foreground" />
 			Options

@@ -1153,6 +1153,7 @@
 		{totalCapped}
 		maxAssets={rechecks.schema?.max_assets ?? 0}
 		queryActive={Boolean(query.search.trim()) || chips.length > 0 || Boolean(query.host)}
+		query={queryLabel()}
 		busy={rescanBusy}
 		onRescanAll={rescanAllMatching}
 		onRescanAllOptions={openRescanAllOptions}
