@@ -36,9 +36,27 @@
 	const MAX_R = 5.5;
 	const HIT_R = 9;
 	const INSET = 10;
-	const ARC_STAGGER = 0.45;
-	const ARC_RUNNERS = 6;
 	const DEFAULT_VIEW: [number, number] = [-20, 25];
+	const RING_STEP = 3;
+	const RUN_STAGGER = 1.1;
+	const RINGS = [
+		{ inc: 24, precess: 96 },
+		{ inc: 58, precess: -132 },
+		{ inc: -38, precess: 168 }
+	];
+
+	const ringLine = (inc: number, node: number): GeoPermissibleObjects => {
+		const i = (inc * Math.PI) / 180;
+		const coordinates: [number, number][] = [];
+		for (let t = 0; t <= 360; t += RING_STEP) {
+			const a = (t * Math.PI) / 180;
+			coordinates.push([
+				node + (Math.atan2(Math.cos(i) * Math.sin(a), Math.cos(a)) * 180) / Math.PI,
+				(Math.asin(Math.sin(i) * Math.sin(a)) * 180) / Math.PI
+			]);
+		}
+		return { type: 'LineString', coordinates };
+	};
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const land = feature(topology as any, (topology as any).objects.land) as GeoPermissibleObjects;
@@ -56,25 +74,24 @@
 			: DEFAULT_VIEW[1]
 	);
 
-	let spin = $state(0);
-	let paused = $state(false);
-	let turn = 0;
+	let clock = $state(0);
+	let seconds = 0;
 
 	$effect(() => {
-		if (paused) return;
 		if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 		let frame = 0;
 		let last = performance.now();
 		const step = (now: number) => {
-			const elapsed = Math.min(now - last, MAX_FRAME_MS);
+			seconds += Math.min(now - last, MAX_FRAME_MS) / 1000;
 			last = now;
-			turn = (turn + (elapsed / 1000 / SPIN_SECONDS) * 360) % 360;
-			spin = turn;
+			clock = seconds;
 			frame = requestAnimationFrame(step);
 		};
 		frame = requestAnimationFrame(step);
 		return () => cancelAnimationFrame(frame);
 	});
+
+	let spin = $derived(((clock / SPIN_SECONDS) * 360) % 360);
 
 	let rotate = $derived<[number, number]>([-anchor[0] + spin, -tilt]);
 	let projection = $derived(
@@ -116,14 +133,11 @@
 			.sort((a, b) => b.r - a.r)
 	);
 
-	let arcs = $derived(
-		plotted.slice(1).flatMap((p) => {
-			const d = draw({
-				type: 'LineString',
-				coordinates: [plotted[0].geo.lonLat, p.geo.lonLat]
-			});
-			return d ? [{ code: p.code, d }] : [];
-		})
+	let rings = $derived(
+		RINGS.map((r, i) => ({
+			i,
+			d: draw(ringLine(r.inc, -spin + (((clock / r.precess) * 360) % 360))) ?? ''
+		})).filter((r) => r.d)
 	);
 </script>
 
@@ -132,11 +146,7 @@
 	role="img"
 	aria-label="Addresses by country"
 	class={cn('overflow-visible', className)}
-	onpointerenter={() => (paused = true)}
-	onpointerleave={() => {
-		paused = false;
-		onHover?.(null);
-	}}
+	onpointerleave={() => onHover?.(null)}
 >
 	<defs>
 		<radialGradient id="{uid}-sea" cx="36%" cy="30%" r="74%">
@@ -168,11 +178,14 @@
 	<path d={landPath} fill="var(--muted-foreground)" opacity="0.45" />
 	<path d={sphere} fill="none" stroke="var(--border)" stroke-width="1" />
 
-	{#each arcs as arc, i (arc.code)}
-		<path class="arc" d={arc.d} pathLength="1" />
-		{#if i < ARC_RUNNERS}
-			<path class="arc-run" d={arc.d} pathLength="1" style="animation-delay:{i * ARC_STAGGER}s" />
-		{/if}
+	{#each rings as ring (ring.i)}
+		<path class="ring" d={ring.d} pathLength="1" />
+		<path
+			class="ring-run"
+			d={ring.d}
+			pathLength="1"
+			style="animation-delay:{ring.i * RUN_STAGGER}s"
+		/>
 	{/each}
 
 	{#each dots as dot (dot.code)}
@@ -220,30 +233,30 @@
 	:global(.dark) svg {
 		--globe-run: oklch(0.98 0.01 264);
 	}
-	.arc {
+	.ring {
 		fill: none;
 		stroke: var(--series);
 		stroke-width: 0.75;
-		opacity: 0.22;
+		opacity: 0.2;
 	}
-	.arc-run {
+	.ring-run {
 		fill: none;
 		stroke: var(--globe-run);
 		stroke-width: 1;
 		stroke-linecap: round;
-		stroke-dasharray: 0.12 0.88;
-		animation: arc-run 3.2s linear infinite;
+		stroke-dasharray: 0.1 0.9;
+		animation: ring-run 3.6s linear infinite;
 	}
-	@keyframes arc-run {
+	@keyframes ring-run {
 		from {
-			stroke-dashoffset: 0.12;
+			stroke-dashoffset: 0.1;
 		}
 		to {
-			stroke-dashoffset: -0.88;
+			stroke-dashoffset: -0.9;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.arc-run {
+		.ring-run {
 			animation: none;
 			opacity: 0;
 		}
