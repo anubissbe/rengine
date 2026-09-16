@@ -11,6 +11,8 @@ if [ "${API_RELOAD:-true}" = "true" ]; then
         --reload-dir /app/stages \
         --reload-dir /app/reports \
         --reload-dir /app/toolbox \
+        --reload-dir /app/mcp \
+        --reload-dir /app/channels \
         --timeout-graceful-shutdown 2
 fi
 

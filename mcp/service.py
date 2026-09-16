@@ -33,6 +33,7 @@ from mcp.models import (
     McpTokenRead,
     McpToolRead,
 )
+from shared.definitions.channels import CHANNEL_ORDER
 from shared.models.instance_settings import InstanceSettings
 from shared.models.project import Project
 from shared.utils.datetime import utc_now
@@ -98,7 +99,11 @@ class McpService:
         specs = registry.registry()
         tokens = (await self.session.execute(select(McpToken))).scalars().all()
         active = [t for t in tokens if _active(t)]
-        raw_sessions = await telemetry.sessions()
+        raw_sessions = [
+            s
+            for s in await telemetry.sessions()
+            if s.get("client") not in CHANNEL_ORDER
+        ]
 
         return McpStatus(
             enabled=config.enabled,
@@ -136,7 +141,11 @@ class McpService:
         ]
 
     async def calls(self, limit: int = 100) -> list[McpCallRead]:
-        return [McpCallRead(**entry) for entry in await telemetry.recent(limit)]
+        return [
+            McpCallRead(**entry)
+            for entry in await telemetry.recent(limit)
+            if entry.get("client") not in CHANNEL_ORDER
+        ]
 
     async def disconnect(self, token_id: uuid.UUID) -> int:
         return await telemetry.drop(token_id)

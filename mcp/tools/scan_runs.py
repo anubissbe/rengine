@@ -13,6 +13,7 @@ from mcp.capabilities import Capability
 from mcp.context import ToolContext
 from mcp.dimensions import dimension
 from mcp.errors import ToolError
+from mcp.phrasing import elapsed, n, short_id
 from mcp.result import ToolResult
 from mcp.tools._scope import find_target
 from mcp.tools.base import Tool, ToolGroup, ToolInput
@@ -27,6 +28,7 @@ from shared.models.scan import Scan
 from shared.models.target import Target
 from shared.utils.datetime import utc_now
 from shared.utils.text import counted
+from toolbox.base import cell, fact, facts, hero, table
 
 MAX_RUNS = 20
 
@@ -59,6 +61,8 @@ class StatusInput(ToolInput):
 
 class ScanStatus(Tool):
     name = "scan_status"
+    command = "progress"
+    value_field = "scan"
     title = "Scan status"
     group = ToolGroup.ORIENT.value
     description = (
@@ -80,11 +84,13 @@ class ScanStatus(Tool):
         row = await _one_run(ctx, args.scan, args.target)
         stages = await _stages(ctx, row)
         live = row.status in SCAN_LIVE_STATUSES
+        target = await ctx.session.get(Target, row.target_id)
         return ToolResult(
             summary=_status_line(row, stages, live),
             data=_describe(row, stages),
             pivot=links.scan(ctx.ui_base_url, row.id),
             caveats=_status_caveats(row, row.status in SCAN_OPEN_STATUSES),
+            blocks=_status_blocks(row, stages, target),
         )
 
 
@@ -97,6 +103,8 @@ class CancelInput(ToolInput):
 
 class CancelScan(Tool):
     name = "cancel_scan"
+    command = "cancel"
+    value_field = "scan"
     title = "Cancel a scan"
     capability = Capability.LAUNCH.value
     group = ToolGroup.ACT.value
@@ -128,8 +136,11 @@ class CancelScan(Tool):
 
         result = await ScanService(ctx.session).cancel(row.id, row.project_id)
         target = await ctx.session.get(Target, row.target_id)
+        headline = (
+            f"Stopped the scan of {target.target_value if target else row.target_id}"
+        )
         return ToolResult(
-            summary=f"Stopped the scan of {target.target_value if target else row.target_id}",
+            summary=headline,
             data={
                 "scan_id": str(result.id),
                 "status": result.status,
@@ -137,6 +148,7 @@ class CancelScan(Tool):
                 "kept": _found(result),
             },
             pivot=links.scan(ctx.ui_base_url, result.id),
+            blocks=[hero(headline, sub=short_id(result.id))],
             caveats=[
                 "Results written before the stop are kept.",
                 "Dimensions the remaining stages would have covered are not scanned.",
@@ -154,6 +166,8 @@ class PauseInput(ToolInput):
 
 class PauseScan(Tool):
     name = "pause_scan"
+    command = "pause"
+    value_field = "scan"
     title = "Pause a scan"
     capability = Capability.LAUNCH.value
     group = ToolGroup.ACT.value
@@ -185,8 +199,11 @@ class PauseScan(Tool):
 
         result = await ScanService(ctx.session).pause(row.id, row.project_id)
         target = await ctx.session.get(Target, row.target_id)
+        headline = (
+            f"Paused the scan of {target.target_value if target else row.target_id}"
+        )
         return ToolResult(
-            summary=f"Paused the scan of {target.target_value if target else row.target_id}",
+            summary=headline,
             data={
                 "scan_id": str(result.id),
                 "status": result.status,
@@ -194,6 +211,7 @@ class PauseScan(Tool):
                 "kept": _found(result),
             },
             pivot=links.scan(ctx.ui_base_url, result.id),
+            blocks=[hero(headline, sub=short_id(result.id))],
             caveats=[
                 "Stages that were running re-run from the start on resume.",
                 "resume_scan continues the run at its first unfinished stage.",
@@ -211,6 +229,8 @@ class ResumeInput(ToolInput):
 
 class ResumeScan(Tool):
     name = "resume_scan"
+    command = "resume"
+    value_field = "scan"
     title = "Resume a scan"
     capability = Capability.LAUNCH.value
     group = ToolGroup.ACT.value
@@ -242,14 +262,18 @@ class ResumeScan(Tool):
 
         result = await ScanService(ctx.session).resume(row.id, row.project_id)
         target = await ctx.session.get(Target, row.target_id)
+        headline = (
+            f"Resuming the scan of {target.target_value if target else row.target_id}"
+        )
         return ToolResult(
-            summary=f"Resuming the scan of {target.target_value if target else row.target_id}",
+            summary=headline,
             data={
                 "scan_id": str(result.id),
                 "status": result.status,
                 "engine": result.engine_name,
             },
             pivot=links.scan(ctx.ui_base_url, result.id),
+            blocks=[hero(headline, sub=short_id(result.id))],
             caveats=[
                 "The worker picks the run up. scan_status reports it running.",
                 f"Resumed by agent token '{ctx.token.name}' via MCP.",
@@ -338,6 +362,22 @@ async def _running(ctx: ToolContext, limit: int) -> ToolResult:
         ],
         pivot=f"{ctx.ui_base_url.rstrip('/')}/scans",
         caveats=[] if live else ["Start one with start_scan."],
+        blocks=[
+            table(
+                ["Scan", "Target", "Status", "Elapsed"],
+                [
+                    [
+                        cell(short_id(row.id), mono=True),
+                        cell(targets.get(row.target_id) or "", mono=True),
+                        cell(row.status),
+                        cell(elapsed(_elapsed(row))),
+                    ]
+                    for row in rows
+                ],
+                title="Running" if live else "Most recent",
+                empty="No scans.",
+            )
+        ],
     )
 
 
@@ -370,6 +410,29 @@ async def _stages(ctx: ToolContext, row: Scan) -> dict[str, list[str]]:
         elif activity.status == ScanActivityStatus.SKIPPED.value:
             out["skipped"].append(activity.title)
     return {key: list(dict.fromkeys(titles)) for key, titles in out.items()}
+
+
+def _status_blocks(row: Scan, stages: dict[str, list[str]], target) -> list:
+    done = len(stages["done"])
+    total = sum(len(v) for v in stages.values())
+    found = _found(row)
+    return [
+        hero(
+            f"{target.target_value if target else short_id(row.target_id)} · {row.status}",
+            sub=f"{row.engine_name} · {elapsed(_elapsed(row))}".rstrip(" ·"),
+        ),
+        facts(
+            fact("Scan", short_id(row.id), mono=True),
+            fact("Stages", f"{done} of {total} done"),
+            fact("Running", ", ".join(stages["running"][:4]) or None),
+            fact("Failed", ", ".join(stages["failed"][:4]) or None),
+            fact("Error", row.error or None),
+        ),
+        facts(
+            *[fact(label, n(count)) for label, count in found.items() if count],
+            title="Found so far",
+        ),
+    ]
 
 
 def _describe(row: Scan, stages: dict[str, list[str]]) -> dict:

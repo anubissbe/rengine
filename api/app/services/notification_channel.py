@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import encrypt_secret, try_decrypt
+from shared.enums.api_key import APIProvider
 from shared.enums.notification_channel import URL_PROVIDERS, NotificationProvider
 from shared.models.notification_channel import (
     PROVIDERS,
@@ -20,7 +21,8 @@ from shared.models.notification_channel import (
     NotificationChannelUpdate,
     NotificationPreference,
 )
-from shared.services.notifier import send_one
+from shared.services.api_key.async_api_key import APIKeyService
+from shared.services.notifier import send_one, with_shared_bot
 from shared.services.scan_resolve import MASK
 from shared.utils.datetime import utc_now
 from shared.utils.net import validate_public_https_url
@@ -42,7 +44,7 @@ REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     NotificationProvider.DISCORD.value: ("webhook_url",),
     NotificationProvider.TEAMS.value: ("webhook_url",),
     NotificationProvider.WEBHOOK.value: ("webhook_url",),
-    NotificationProvider.TELEGRAM.value: ("bot_token", "chat_id"),
+    NotificationProvider.TELEGRAM.value: ("chat_id",),
     NotificationProvider.EMAIL.value: ("smtp_host", "username", "password", "to_email"),
     NotificationProvider.CUSTOM.value: ("apprise_url",),
 }
@@ -217,6 +219,11 @@ class NotificationChannelService:
         await self.session.commit()
         return True
 
+    async def _with_shared_bot(self, provider: str, config: dict) -> dict:
+        keys = APIKeyService(self.session)
+        token = await keys.get_key_for_provider(APIProvider.TELEGRAM)
+        return with_shared_bot(provider, config, lambda _p: token)
+
     async def test_config(
         self, provider: str, config: dict
     ) -> NotificationChannelTestResult:
@@ -224,6 +231,7 @@ class NotificationChannelService:
             msg = f"Invalid provider. Must be one of {', '.join(PROVIDERS)}."
             raise _bad(msg)
         config = {k: v for k, v in (config or {}).items() if v is not None}
+        config = await self._with_shared_bot(provider, config)
         for field, value in config.items():
             if isinstance(value, str) and MASK in value:
                 msg = f"'{field}' carries a masked value. Enter the value again."
@@ -241,7 +249,7 @@ class NotificationChannelService:
 
     async def test(self, id: UUID) -> NotificationChannelTestResult:
         channel = await self._get_or_404(id)
-        config = _decrypt_config(channel)
+        config = await self._with_shared_bot(channel.provider, _decrypt_config(channel))
         ok, message = await asyncio.to_thread(
             send_one,
             channel.provider,

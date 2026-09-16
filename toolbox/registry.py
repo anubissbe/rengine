@@ -34,6 +34,7 @@ class ToolSpec:
     order: int
     value_field: str
     placeholder: str
+    command: str
     examples: tuple[str, ...]
     tool_cls: type[Tool]
 
@@ -135,6 +136,7 @@ def registry() -> dict[str, ToolSpec]:
             order=int(cls.order),
             value_field=cls.value_field,
             placeholder=cls.placeholder,
+            command=cls.command or cls.name,
             examples=tuple(cls.examples),
             tool_cls=cls,
         )

@@ -55,6 +55,7 @@ services:
       ${REDIS_PASSWORD:+--requirepass} ${REDIS_PASSWORD:-}
 
   api:
+    image: rengine-api:latest
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -67,6 +68,7 @@ services:
       - ./reports:/app/reports
       - ./interest:/app/interest
       - ./mcp:/app/mcp
+      - ./channels:/app/channels
       - ./connectors:/app/connectors
       - ./toolbox:/app/toolbox
       - ./binaries:/app/binaries:ro
@@ -208,6 +210,38 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # remote control: long-polls every chat channel that is switched on
+  channels:
+    init: true
+    # built by api
+    image: rengine-api:latest
+    volumes:
+      - ./api/app:/app/app
+      - ./shared:/app/shared
+      - ./tools:/app/tools
+      - ./stages:/app/stages
+      - ./reports:/app/reports
+      - ./interest:/app/interest
+      - ./mcp:/app/mcp
+      - ./channels:/app/channels
+      - ./connectors:/app/connectors
+      - ./toolbox:/app/toolbox
+      - /app/shared/build
+      - /app/shared/rengine_shared.egg-info
+      - /app/tools/build
+      - /app/tools/rengine_tools.egg-info
+    env_file:
+      - .env
+    command: uv run python -m channels
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
 
   flower:
     # built by worker-default

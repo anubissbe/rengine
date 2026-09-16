@@ -16,6 +16,7 @@ from mcp.tools._scope import project_for, resolve
 from mcp.tools.base import Tool, ToolGroup, ToolInput
 from shared.models.project import Project
 from shared.models.target import Target
+from toolbox.base import fact, facts, hero
 
 MAX_VALUES = 50
 MAX_LABELS = 20
@@ -46,6 +47,8 @@ class AddInput(ToolInput):
 
 class AddTarget(Tool):
     name = "add_target"
+    command = "add"
+    value_field = "targets"
     title = "Add targets"
     capability = Capability.WRITE.value
     group = ToolGroup.ACT.value
@@ -123,6 +126,14 @@ class AddTarget(Tool):
                 else f"{ctx.ui_base_url.rstrip('/')}/targets"
             ),
             caveats=_added_caveats(created, rejected),
+            blocks=[
+                hero(_added_line(created, len(rows) - len(created), rejected, project)),
+                facts(
+                    fact("Added", ", ".join(r.target_value for r in created) or None),
+                    fact("Already present", ", ".join(sorted(present)) or None),
+                    fact("Rejected", ", ".join(rejected) or None),
+                ),
+            ],
         )
 
 

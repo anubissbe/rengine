@@ -101,6 +101,7 @@ class SubdomainFinder(Tool):
     execution = ToolExecution.QUEUED.value
     order = 40
     value_field = "domain"
+    command = "subs"
     placeholder = "example.com"
     examples = ("example.com",)
     Input = Input

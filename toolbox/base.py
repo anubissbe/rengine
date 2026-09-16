@@ -62,6 +62,8 @@ class Tool(ABC):
     touches_target: ClassVar[bool] = False
     order: ClassVar[int] = 50
     value_field: ClassVar[str] = ""
+    # the chat command; empty means the tool name
+    command: ClassVar[str] = ""
     placeholder: ClassVar[str] = ""
     examples: ClassVar[tuple[str, ...]] = ()
     Input: ClassVar[type[ToolInput]]

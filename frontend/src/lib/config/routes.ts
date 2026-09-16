@@ -19,6 +19,7 @@ export const routeLabels: Record<string, string> = {
 	scans: 'Scans',
 	compare: 'Compare runs',
 	connectors: 'Connectors',
+	'remote-control': 'Remote control',
 	notes: 'Notes',
 	'bounty-hub': 'Bounty Hub',
 
@@ -68,6 +69,8 @@ export const CONNECTOR_TABS = ['queue', 'discovered', 'settings'] as const;
 export type ConnectorTab = (typeof CONNECTOR_TABS)[number];
 export const MCP_TABS = ['server', 'tools', 'access', 'activity'] as const;
 export type McpTab = (typeof MCP_TABS)[number];
+export const REMOTE_CONTROL_TABS = ['telegram'] as const;
+export type RemoteControlTab = (typeof REMOTE_CONTROL_TABS)[number];
 export type AiSection = (typeof AI_SECTIONS)[number];
 export type ArsenalTab = (typeof ARSENAL_TABS)[number];
 
@@ -132,6 +135,8 @@ export const ROUTES = {
 	ai: (section?: AiSection) => (section ? `/settings/ai#ai-${section}` : '/settings/ai'),
 	mcp: (tab?: McpTab) => (tab ? `/settings/mcp?tab=${tab}` : '/settings/mcp'),
 	connectors: (tab?: ConnectorTab) => (tab ? `/connectors?tab=${tab}` : '/connectors'),
+	remoteControl: (tab?: RemoteControlTab) =>
+		tab ? `/remote-control?tab=${tab}` : '/remote-control',
 	settings: (section?: SettingsSection) => (section ? `/settings/${section}` : '/settings')
 } as const;
 

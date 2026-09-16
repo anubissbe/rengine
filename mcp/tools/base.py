@@ -40,6 +40,10 @@ class Tool(ABC):
     group: ClassVar[str] = ToolGroup.INTERROGATE.value
     # the call destroys data a user cannot get back
     destructive: ClassVar[bool] = False
+    # one short word; None keeps the tool out of chat
+    command: ClassVar[str | None] = None
+    # the field a bare chat argument fills
+    value_field: ClassVar[str] = ""
     Input: ClassVar[type[ToolInput]] = NoInput
     examples: ClassVar[tuple[str, ...]] = ()
 

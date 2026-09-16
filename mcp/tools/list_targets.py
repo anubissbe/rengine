@@ -12,6 +12,7 @@ from mcp.tools.base import Tool, ToolGroup, ToolInput
 from shared.models.project import Project
 from shared.models.target import Target
 from shared.utils.text import counted
+from toolbox.base import cell, table
 
 MAX_TARGETS = 100
 
@@ -25,6 +26,8 @@ class Input(ToolInput):
 
 class ListTargets(Tool):
     name = "list_targets"
+    command = "targets"
+    value_field = "contains"
     title = "List targets"
     group = ToolGroup.ORIENT.value
     description = "The targets this token can reach, with project and type."
@@ -75,6 +78,20 @@ class ListTargets(Tool):
                 if len(rows) > len(shown)
                 else []
             ),
+            blocks=[
+                table(
+                    ["Target", "Type"],
+                    [
+                        [
+                            cell(row.target_value, mono=True),
+                            cell(getattr(row.target_type, "value", row.target_type)),
+                        ]
+                        for row in shown
+                    ],
+                    total=len(rows),
+                    empty="No targets.",
+                )
+            ],
         )
 
 

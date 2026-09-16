@@ -8,11 +8,13 @@ from pydantic import Field
 
 from mcp import links
 from mcp.context import ToolContext
+from mcp.phrasing import n, stamp
 from mcp.result import ToolResult
 from mcp.tools._scope import project_for
 from mcp.tools.base import Tool, ToolGroup, ToolInput
 from shared.definitions.dashboard import DEFAULT_WINDOW, WINDOW_DELTAS
 from shared.utils.text import counted
+from toolbox.base import cell, fact, facts, hero, table
 
 MAX_ROWS = 30
 WINDOWS = tuple(WINDOW_DELTAS)
@@ -31,6 +33,8 @@ class Input(ToolInput):
 
 class WhatChanged(Tool):
     name = "what_changed"
+    command = "changes"
+    value_field = "window"
     title = "What changed"
     group = ToolGroup.INTERROGATE.value
     description = (
@@ -110,4 +114,42 @@ class WhatChanged(Tool):
             },
             pivot=links.dashboard(ctx.ui_base_url),
             caveats=caveats,
+            blocks=_blocks(headline, overview, risk, changes),
         )
+
+
+def _change_line(row: dict) -> str:
+    parts = [f"{k.replace('_', ' ')} +{v}" for k, v in row["new"].items()]
+    if row["first_time_covered"]:
+        parts.append("first: " + ", ".join(row["first_time_covered"]))
+    if row["web_assets_gone"]:
+        parts.append(f"web assets gone {row['web_assets_gone']}")
+    return " · ".join(parts)
+
+
+def _blocks(headline: str, overview, risk, changes: list[dict]) -> list:
+    tiers = dict(getattr(risk, "tiers", None) or {})
+    return [
+        hero(headline),
+        facts(
+            fact("Targets", n(overview.targets_total)),
+            fact("Scanned", n(overview.targets_scanned)),
+            fact("Never scanned", n(overview.targets_never_scanned) or None),
+            fact("Findings", n(risk.total) if risk else None),
+            fact("Act now", n(tiers.get("act")) if tiers.get("act") else None),
+            fact("KEV", n(risk.kev) if risk and risk.kev else None),
+        ),
+        table(
+            ["Target", "Last run", "Change"],
+            [
+                [
+                    cell(row["target"], mono=True),
+                    cell(f"{row['last_status']} {stamp(row['last_scan_at'])}"),
+                    cell(_change_line(row)),
+                ]
+                for row in changes
+            ],
+            title="Changes",
+            empty="No changes.",
+        ),
+    ]

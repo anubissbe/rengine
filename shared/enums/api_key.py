@@ -11,3 +11,4 @@ class APIProvider(Enum):
     VULNX = "vulnx"
     INTERACTSH = "interactsh"
     GITHUB = "github"
+    TELEGRAM = "telegram"

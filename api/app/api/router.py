@@ -28,6 +28,7 @@ from app.api.v1 import (
     ports,
     projects,
     proxies,
+    remote_control,
     reports,
     ripestat,
     scan_contexts,
@@ -75,6 +76,7 @@ router.include_router(subdomains.router)
 router.include_router(domain_posture.router)
 router.include_router(surface.router)
 router.include_router(mcp.router)
+router.include_router(remote_control.router)
 router.include_router(connectors.router)
 router.include_router(http_assets.router)
 router.include_router(ports.router)

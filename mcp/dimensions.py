@@ -83,7 +83,7 @@ class Dimension:
     ) -> Any:
         service = self.service(session)
         if self.needs_project:
-            return await service.search(project_id=project_id, scan_id=scan_id, f=f)
+            return await service.search(project_id, scan_id, f)
         return await service.search(scan_id, f)
 
     async def leads(
@@ -91,7 +91,7 @@ class Dimension:
     ) -> Any:
         service = self.service(session)
         if self.needs_project:
-            return await service.leads(project_id=project_id, scan_id=scan_id, f=f)
+            return await service.leads(project_id, scan_id, f)
         return await service.leads(scan_id, f)
 
     async def groups(
@@ -104,9 +104,7 @@ class Dimension:
     ) -> Any:
         service = self.service(session)
         if self.needs_project:
-            return await service.groups(
-                project_id=project_id, scan_id=scan_id, f=f, key=key
-            )
+            return await service.groups(project_id, scan_id, f, key)
         return await service.groups(scan_id, f, key)
 
 

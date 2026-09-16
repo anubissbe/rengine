@@ -92,4 +92,5 @@ markers = [
     "api: exercised through the HTTP surface",
     "hygiene: hardening checks read off stored responses",
     "posture: sender, mail and zone checks read from DNS",
+    "channels: remote control over a chat channel",
 ]

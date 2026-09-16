@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from shared.enums.api_key import APIProvider
 from shared.enums.notification import NotificationSeverity, NotificationType
 from shared.enums.notification_channel import DIRECT_POST_PROVIDERS
 from shared.http import get_sync_client
@@ -43,6 +44,17 @@ def wants(pref: dict, ntype: NotificationType, severity: NotificationSeverity) -
     if ntype.value not in types:
         return False
     return severity_passes((pref or {}).get("min_severity", "info"), severity.value)
+
+
+SHARED_BOT_PROVIDER = "telegram"
+
+
+def with_shared_bot(provider: str, config: dict, lookup) -> dict:
+    """A Telegram channel with no token of its own sends as the Telegram API key's bot."""
+    if provider != SHARED_BOT_PROVIDER or (config or {}).get("bot_token"):
+        return config or {}
+    token = lookup(APIProvider.TELEGRAM)
+    return {**(config or {}), "bot_token": token} if token else (config or {})
 
 
 def build_apprise_url(provider: str, config: dict) -> str | None:
@@ -199,8 +211,13 @@ def dispatch_sync(
     attach: str | None = None,
 ) -> None:
     """Named channels receive it regardless of their event preferences."""
+    from shared.services.api_key.sync_api_key import SyncAPIKeyService  # noqa: PLC0415
+
     rows = session.execute(_channel_query(channel_ids)).scalars().all()
     targets = _channels_to_targets(list(rows))
+    lookup = SyncAPIKeyService(session).get_key_for_provider
+    for target in targets:
+        target["config"] = with_shared_bot(target["provider"], target["config"], lookup)
     if targets:
         _fan_out(
             targets,
@@ -223,9 +240,16 @@ async def dispatch_async(
     channel_ids=None,
     attach: str | None = None,
 ) -> None:
+    from shared.services.api_key.async_api_key import APIKeyService  # noqa: PLC0415
+
     result = await session.execute(_channel_query(channel_ids))
     targets = _channels_to_targets(list(result.scalars().all()))
     if targets:
+        token = await APIKeyService(session).get_key_for_provider(APIProvider.TELEGRAM)
+        for target in targets:
+            target["config"] = with_shared_bot(
+                target["provider"], target["config"], lambda _p: token
+            )
         await asyncio.to_thread(
             _fan_out,
             targets,

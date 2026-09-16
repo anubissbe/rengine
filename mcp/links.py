@@ -45,5 +45,10 @@ def dashboard(ui: str) -> str:
     return f"{_base(ui)}/dashboard"
 
 
+def surface(ui: str, tab: str, query: str | None = None) -> str:
+    suffix = f"?{urlencode({'q': query})}" if query else ""
+    return f"{_base(ui)}/surface/{tab}{suffix}"
+
+
 def cve(ui: str, cve_id: str) -> str:
     return f"{_base(ui)}/surface/cve/{cve_id}"

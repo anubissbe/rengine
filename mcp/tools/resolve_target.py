@@ -7,10 +7,12 @@ from pydantic import Field
 from mcp import links
 from mcp.context import ToolContext
 from mcp.dimensions import DIMENSIONS
+from mcp.phrasing import n, stamp
 from mcp.result import ToolResult
 from mcp.tools._scope import resolve
 from mcp.tools.base import Tool, ToolGroup, ToolInput
 from shared.utils.text import counted
+from toolbox.base import fact, facts, hero
 
 
 class Input(ToolInput):
@@ -21,6 +23,8 @@ class Input(ToolInput):
 
 class ResolveTarget(Tool):
     name = "resolve_target"
+    command = "target"
+    value_field = "target"
     title = "Resolve target"
     group = ToolGroup.ORIENT.value
     description = (
@@ -105,4 +109,30 @@ class ResolveTarget(Tool):
             },
             pivot=links.target(ctx.ui_base_url, scope.target.id),
             caveats=caveats,
+            blocks=_blocks(headline, surface, risk, summary),
         )
+
+
+def _blocks(headline: str, surface: list[dict], risk, summary) -> list:
+    severities = " · ".join(f"{s.label} {s.count}" for s in risk.by_severity if s.count)
+    latest = max((s["observed_at"] for s in surface if s["observed_at"]), default=None)
+    return [
+        hero(headline, sub=f"Last observed {stamp(latest)}" if latest else None),
+        facts(
+            *[
+                fact(s["label"], n(s["count"]) if s["covered"] else "not scanned")
+                for s in surface
+            ]
+        ),
+        facts(
+            fact("Findings", n(risk.total)),
+            fact("Need review", n(risk.actionable)),
+            fact("KEV", n(risk.kev) if risk.kev else None),
+            fact("Severity", severities or None),
+            fact("Sensitive services", n(summary.sensitive_services) or None),
+            fact(
+                "Scans running",
+                n(summary.scans_running) if summary.scans_running else None,
+            ),
+        ),
+    ]

@@ -119,7 +119,8 @@
 					icon: LibraryIcon,
 					items: [
 						{ title: routeLabels.arsenal, url: ROUTES.arsenal() },
-						{ title: routeLabels.connectors, url: ROUTES.connectors() }
+						{ title: routeLabels.connectors, url: ROUTES.connectors() },
+						{ title: routeLabels['remote-control'], url: ROUTES.remoteControl() }
 					]
 				}
 			]

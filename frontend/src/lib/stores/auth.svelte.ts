@@ -42,6 +42,7 @@ import { surfaceStore } from '$lib/stores/surface.svelte';
 import { recent } from '$lib/stores/recent.svelte';
 import { ai } from '$lib/stores/ai.svelte';
 import { mcp } from '$lib/stores/mcp.svelte';
+import { remoteControl } from '$lib/stores/remote-control.svelte';
 import { clearServiceLookup } from '$lib/utilities/service-lookup';
 
 interface AuthState {
@@ -141,6 +142,7 @@ function createAuthStore() {
 		surfaceStore.reset();
 		ai.reset();
 		mcp.reset();
+		remoteControl.reset();
 		connectors.reset();
 		toolbox.reset();
 		clearServiceLookup();

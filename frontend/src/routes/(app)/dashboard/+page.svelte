@@ -19,7 +19,6 @@
 	import LaunchDialog from '$lib/components/scans/launch/launch-dialog.svelte';
 	import ScheduleModal from '$lib/components/schedules/schedule-modal.svelte';
 	import FirstRunPanel from '$lib/components/dashboard/first-run/first-run-panel.svelte';
-	import Launcher from '$lib/components/dashboard/first-run/launcher.svelte';
 	import SurfaceRiskCell from '$lib/components/dashboard/surface-risk-cell.svelte';
 	import InventoryCell from '$lib/components/dashboard/inventory-cell.svelte';
 	import ChangesCell from '$lib/components/dashboard/changes-cell.svelte';
@@ -54,11 +53,11 @@
 	} from '$lib/types/dashboard';
 
 	const TICK_MS = 1000;
+	const LIVE_REFRESH_MS = 30000;
 
 	let activeProject = $derived(projectsStore.activeProject);
 	let overview = $derived(dashboardStore.overview);
-	let firstRun = $derived(!!overview?.first_run && !overview.last_completed_at);
-	let emptyProject = $derived(!!overview && overview.targets_total === 0 && !liveScans.hasLive);
+	let firstRun = $derived(!!overview?.first_run);
 	let addTargetOpen = $state(false);
 	let launchOpen = $state(false);
 	let launchTargetIds = $state<string[] | undefined>(undefined);
@@ -107,7 +106,11 @@
 	$effect(() => {
 		if (!liveScans.hasLive) return;
 		const iv = setInterval(() => (now = Date.now()), TICK_MS);
-		return () => clearInterval(iv);
+		const refresh = setInterval(() => dashboardStore.refresh(), LIVE_REFRESH_MS);
+		return () => {
+			clearInterval(iv);
+			clearInterval(refresh);
+		};
 	});
 
 	function scanTargets(ids?: string[]) {
@@ -131,7 +134,7 @@
 				{activeProject?.name ?? 'Dashboard'}{#if overview}
 					· {plural(overview.targets_total, 'target', 'targets')} · {days} days{/if}
 			</span>
-			{#if headline && !firstRun && !emptyProject && !headline.findings && !headline.web}
+			{#if headline && !firstRun && !headline.findings && !headline.web}
 				<h1 class="max-w-[34ch] text-2xl leading-tight font-semibold tracking-tight text-balance">
 					{plural(headline.runs, 'run', 'runs')} in {days} days.
 					<span class="font-medium text-muted-foreground">
@@ -142,7 +145,7 @@
 						{/if}
 					</span>
 				</h1>
-			{:else if headline && !firstRun && !emptyProject}
+			{:else if headline && !firstRun}
 				<h1 class="max-w-[34ch] text-2xl leading-tight font-semibold tracking-tight text-balance">
 					{#if headline.critical}
 						<span class="text-destructive"
@@ -161,7 +164,7 @@
 				<h1 class="text-lg font-semibold">Dashboard</h1>
 			{/if}
 		</div>
-		{#if activeProject && !firstRun && !emptyProject}
+		{#if activeProject && !firstRun}
 			<div class="flex flex-wrap items-center gap-2">
 				<ToggleGroup.Root
 					type="single"
@@ -230,13 +233,7 @@
 			</Empty.Content>
 		</Empty.Root>
 	{:else if firstRun}
-		<FirstRunPanel {overview} readiness={dashboardStore.readiness} {now} />
-	{:else if emptyProject}
-		<Card.Root class="gap-0 overflow-hidden py-0">
-			<div class="px-5 py-5">
-				<Launcher heading="No targets in this project" sub="Add a target or start a scan." />
-			</div>
-		</Card.Root>
+		<FirstRunPanel readiness={dashboardStore.readiness} />
 	{:else if overview}
 		{#if notLoaded.length}
 			<div

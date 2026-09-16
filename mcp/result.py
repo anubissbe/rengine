@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from shared.definitions.toolbox import Block
+
 MAX_TEXT_BYTES = 60_000
 
 UNTRUSTED_NOTE = (
@@ -24,6 +26,8 @@ class ToolResult:
     caveats: list[str] = field(default_factory=list)
     # rows carry text controlled by the scanned target
     untrusted: bool = False
+    # the human rendering; data stays the machine one
+    blocks: list[Block] = field(default_factory=list)
 
     def payload(self) -> dict:
         body: dict[str, Any] = {"summary": self.summary}

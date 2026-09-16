@@ -98,6 +98,20 @@ async def _call(request: Request, ctx: ToolContext) -> dict:
         message = "A tool call must name a tool."
         raise InvalidParamsError(message)
 
+    raw = request.params.get("arguments") or {}
+    if not isinstance(raw, dict):
+        msg = "arguments must be an object."
+        raise ToolError(msg)
+
+    try:
+        result = await invoke(ctx, name, raw)
+    except (InvalidParamsError, ToolError) as exc:
+        return _errored(exc.message)
+    return {"content": result.content(), "structuredContent": result.payload()}
+
+
+async def invoke(ctx: ToolContext, name: str, raw: dict) -> ToolResult:
+    """Run one tool for any transport; every failure is an McpError."""
     spec = registry.get(name)
     if spec is None:
         known = ", ".join(sorted(registry.registry()))
@@ -106,32 +120,28 @@ async def _call(request: Request, ctx: ToolContext) -> dict:
 
     ctx.require(spec.capability)
 
-    raw = request.params.get("arguments") or {}
-    if not isinstance(raw, dict):
-        msg = "arguments must be an object."
-        raise ToolError(msg)
-
     try:
         args = spec.tool_cls.Input.model_validate(raw)
     except ValidationError as exc:
-        return _errored(_readable(exc))
+        raise InvalidParamsError(_readable(exc)) from exc
 
     started = time.monotonic()
     try:
         result = await spec.tool_cls().run(ctx, args)
     except McpError as exc:
         await _observe(ctx, name, ok=False, started=started, detail=exc.message)
-        return _errored(exc.message)
+        raise ToolError(exc.message, exc.data) from exc
     except Exception as exc:
         logger.exception("mcp tool failed", tool=name)
         await _observe(ctx, name, ok=False, started=started, detail=str(exc))
-        return _errored(f"{spec.title} failed: {exc}")
+        msg = f"{spec.title} failed: {exc}"
+        raise ToolError(msg) from exc
 
     await _observe(ctx, name, ok=True, started=started)
     if not isinstance(result, ToolResult):
         msg = f"{name} returned {type(result).__name__}, expected ToolResult."
         raise ToolError(msg)
-    return {"content": result.content(), "structuredContent": result.payload()}
+    return result
 
 
 def _errored(message: str) -> dict:
@@ -185,4 +195,4 @@ _HANDLERS: dict[str, Any] = {
     Method.TOOLS_CALL: _call,
 }
 
-__all__: list[str] = ["INSTRUCTIONS", "handle"]
+__all__: list[str] = ["INSTRUCTIONS", "handle", "invoke"]

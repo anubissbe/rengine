@@ -66,9 +66,9 @@ export const NOTIFICATION_PROVIDERS: ProviderMeta[] = [
 			{
 				key: 'bot_token',
 				label: 'Bot token',
-				placeholder: '123456:ABC-DEF...',
+				placeholder: 'Blank uses the Telegram API key',
 				kind: 'secret',
-				required: true
+				required: false
 			},
 			{
 				key: 'chat_id',

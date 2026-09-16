@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentSuperuser
 from app.core.database import get_session
+from channels.settings import valid_telegram_token
+from channels.telegram.driver import TelegramError
+from channels.telegram.driver import verify as verify_bot
 from shared.enums.api_key import APIProvider
 from shared.models.api_key import APIKeyCreate, APIKeyRead, APIKeyUpdate, ProviderInfo
 from shared.services.api_key.async_api_key import APIKeyService
@@ -45,10 +48,23 @@ async def _test_intigriti(key_value: str, _key_meta: dict | None) -> dict:
     return {"message": f"Signed in to Intigriti.{_programs_seen(result)}"}
 
 
+async def _test_telegram(key_value: str, _key_meta: dict | None) -> dict:
+    if not valid_telegram_token(key_value):
+        msg = "The bot token does not have the shape Telegram issues."
+        raise ValueError(msg)
+    try:
+        info = await verify_bot(key_value)
+    except TelegramError as exc:
+        msg = f"Telegram refused the bot token: {exc.description}."
+        raise ValueError(msg) from exc
+    return {"message": f"Bot @{info.username} verified."}
+
+
 API_KEY_TESTERS = {
     APIProvider.VIEWDNS: _test_viewdns,
     APIProvider.HACKERONE: _test_hackerone,
     APIProvider.INTIGRITI: _test_intigriti,
+    APIProvider.TELEGRAM: _test_telegram,
 }
 
 

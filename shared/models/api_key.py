@@ -73,6 +73,13 @@ API_PROVIDER_META: dict[str, dict] = {
         "requires_username": False,
         "icon": "satellite-dish",
     },
+    APIProvider.TELEGRAM: {
+        "name": "Telegram",
+        "description": "Bot token for remote control and notifications",
+        "docs_url": "https://core.telegram.org/bots#how-do-i-create-a-bot",
+        "requires_username": False,
+        "icon": "send",
+    },
 }
 
 

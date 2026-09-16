@@ -14,6 +14,7 @@ import ScanSearch from '@lucide/svelte/icons/scan-search';
 import Biohazard from '@lucide/svelte/icons/biohazard';
 import SatelliteDish from '@lucide/svelte/icons/satellite-dish';
 import Package from '@lucide/svelte/icons/package';
+import Send from '@lucide/svelte/icons/send';
 
 export type IconComponent = typeof Globe;
 
@@ -53,7 +54,8 @@ export const PROVIDER_ICONS: Record<string, IconComponent> = {
 	'scan-search': ScanSearch,
 	biohazard: Biohazard,
 	'satellite-dish': SatelliteDish,
-	github: Github
+	github: Github,
+	send: Send
 };
 
 export function getProviderIcon(icon: string): IconComponent {

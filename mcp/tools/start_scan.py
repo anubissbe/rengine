@@ -10,10 +10,12 @@ from mcp import links
 from mcp.capabilities import Capability
 from mcp.context import ToolContext
 from mcp.errors import ToolError
+from mcp.phrasing import short_id
 from mcp.result import ToolResult
 from mcp.tools._scope import project_for
 from mcp.tools.base import Tool, ToolGroup, ToolInput
 from shared.enums.scan import Intensity
+from toolbox.base import fact, facts, hero
 
 
 class Input(ToolInput):
@@ -40,6 +42,8 @@ class Input(ToolInput):
 
 class StartScan(Tool):
     name = "start_scan"
+    command = "scan"
+    value_field = "target"
     title = "Start a scan"
     capability = Capability.LAUNCH.value
     group = ToolGroup.ACT.value
@@ -100,6 +104,10 @@ class StartScan(Tool):
                 _traffic_note(scan),
                 "scan_status follows the run. cancel_scan stops it.",
                 f"Started by agent token '{ctx.token.name}' via MCP.",
+            ],
+            blocks=[
+                hero(f"Scan started on {target}", sub=scan.engine_name),
+                facts(fact("Scan", short_id(scan.id), mono=True)),
             ],
         )
 
