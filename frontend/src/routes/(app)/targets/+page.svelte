@@ -554,6 +554,7 @@
 				variant="outline"
 				size="icon"
 				class="h-9 w-9"
+				aria-label="Refresh"
 				onclick={handleRefresh}
 				disabled={isRefreshing}
 			>

@@ -443,6 +443,7 @@
 												variant="ghost"
 												size="icon"
 												class="size-6"
+												aria-label="Open in Endpoints"
 												href={endpointsLink(row)}
 											>
 												<ListTreeIcon class="size-3.5" />
@@ -457,6 +458,7 @@
 											variant="ghost"
 											size="icon"
 											class="size-6"
+											aria-label="Open in a new tab"
 											href={row.url}
 											target="_blank"
 											rel="noopener noreferrer"

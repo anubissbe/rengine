@@ -297,6 +297,7 @@
 									variant="ghost"
 									size="icon"
 									class="size-7 text-muted-foreground"
+									aria-label="Find"
 									onclick={openFind}
 								>
 									<Search class="size-3.5" />
