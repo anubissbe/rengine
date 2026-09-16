@@ -55,8 +55,9 @@
 		checking = true;
 		try {
 			preview = await interestApi.preview(query);
-		} catch {
+		} catch (e) {
 			preview = null;
+			toast.error(e instanceof Error ? e.message : 'Query not checked');
 		} finally {
 			checking = false;
 		}

@@ -29,6 +29,7 @@
 	let expanded = $state(false);
 	let loading = $state(false);
 	let loaded = $state(false);
+	let error = $state<string | null>(null);
 	let scans = $state<ScanRead[]>([]);
 
 	let stale = $derived(
@@ -39,11 +40,13 @@
 		expanded = !expanded;
 		if (expanded && !loaded && !loading) {
 			loading = true;
+			error = null;
 			try {
 				scans = await loadScans(group.target_id);
 				loaded = true;
-			} catch {
+			} catch (e) {
 				scans = [];
+				error = e instanceof Error ? e.message : 'Runs not loaded.';
 			} finally {
 				loading = false;
 			}
@@ -116,6 +119,8 @@
 						<Skeleton class="h-8 w-full" />
 					{/each}
 				</div>
+			{:else if error}
+				<div class="px-4 py-4 text-xs text-muted-foreground">Runs not loaded. {error}</div>
 			{:else if scans.length === 0}
 				<div class="px-4 py-4 text-xs text-muted-foreground">No scans match the filters.</div>
 			{:else}

@@ -75,6 +75,7 @@
 
 	let rescansOpen = $state(false);
 	let rescansLoading = $state(false);
+	let rescansError = $state<string | null>(null);
 	let rescanRuns = $state<ScanRead[]>([]);
 	let rescanTotal = $state(0);
 
@@ -83,12 +84,14 @@
 
 	async function loadRescans(size: number) {
 		rescansLoading = true;
+		rescansError = null;
 		try {
 			const page = await scansStore.loadRescans(scan.id, size);
 			rescanRuns = page.items;
 			rescanTotal = page.total;
-		} catch {
+		} catch (e) {
 			rescanRuns = [];
+			rescansError = e instanceof Error ? e.message : 'Rechecks not loaded.';
 		} finally {
 			rescansLoading = false;
 		}
@@ -500,6 +503,10 @@
 					{#each Array(2) as _, i (i)}
 						<Skeleton class="h-8 w-full" />
 					{/each}
+				</div>
+			{:else if rescansError}
+				<div class="px-4 py-4 text-xs text-muted-foreground">
+					Rechecks not loaded. {rescansError}
 				</div>
 			{:else if rescanRuns.length === 0}
 				<div class="px-4 py-4 text-xs text-muted-foreground">No rescans.</div>
