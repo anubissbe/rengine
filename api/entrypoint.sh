@@ -1,18 +1,16 @@
 #!/bin/sh
 set -e
 
+# every package compose mounts from the host; a save in one reloads the api
+RELOAD_DIRS="app shared tools stages reports interest mcp channels connectors toolbox"
+
 if [ "${API_RELOAD:-true}" = "true" ]; then
+    for dir in $RELOAD_DIRS; do
+        set -- "$@" --reload-dir "/app/$dir"
+    done
     exec uv run uvicorn app.main:app \
         --host 0.0.0.0 --port 8000 \
-        --reload \
-        --reload-dir /app/app \
-        --reload-dir /app/shared \
-        --reload-dir /app/tools \
-        --reload-dir /app/stages \
-        --reload-dir /app/reports \
-        --reload-dir /app/toolbox \
-        --reload-dir /app/mcp \
-        --reload-dir /app/channels \
+        --reload "$@" \
         --timeout-graceful-shutdown 2
 fi
 
