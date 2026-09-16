@@ -38,6 +38,7 @@ import {
 	formatShortDate,
 	MS_PER_DAY
 } from '$lib/utilities/dates';
+import { plural } from '$lib/utilities/strings';
 
 export type Tone = 'neutral' | 'good' | 'warn' | 'bad';
 export type EvidenceTab = 'dns' | 'whois' | 'bgp';
@@ -80,7 +81,6 @@ export interface TargetIntel {
 	rail: RailGroup[];
 	checks: Check[];
 }
-
 const YOUNG_DOMAIN_DAYS = 90;
 const VALID_RIR = /^(arin|ripe|apnic|lacnic|afrinic)/i;
 const PREVIEW = 1;
@@ -95,10 +95,6 @@ function ofType(records: DnsRecordRead[], type: string): string[] {
 function shortError(err: string): string {
 	const first = err.split('\n')[0].trim();
 	return first.length > 120 ? `${first.slice(0, 117)}…` : first;
-}
-
-function plural(n: number, one: string, many: string): string {
-	return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
 function daysUntil(date: string): number {

@@ -44,6 +44,7 @@
 	import CustomizePopover from '$lib/components/dashboard/customize-popover.svelte';
 	import DashboardSkeleton from '$lib/components/dashboard/dashboard-skeleton.svelte';
 	import HiddenTray from '$lib/components/dashboard/hidden-tray.svelte';
+	import { plural } from '$lib/utilities/strings';
 	import {
 		DASHBOARD_SLICE_LABELS,
 		DASHBOARD_WINDOWS,
@@ -120,8 +121,6 @@
 		scheduleTargetIds = ids;
 		scheduleOpen = true;
 	}
-	const plural = (n: number, one: string, many: string) =>
-		`${n.toLocaleString()} ${n === 1 ? one : many}`;
 </script>
 
 <svelte:head><title>{routeLabels.dashboard} · reNgine</title></svelte:head>

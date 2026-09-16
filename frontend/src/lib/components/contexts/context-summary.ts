@@ -1,4 +1,5 @@
 import type { ScanContextRead, ScanContextCreate, HttpProtocol } from '$lib/types/scan-context';
+import { plural } from '$lib/utilities/strings';
 
 type CtxLike = ScanContextRead | ScanContextCreate;
 
@@ -66,10 +67,6 @@ export function authLabel(ctx: CtxLike): string {
 		default:
 			return 'None';
 	}
-}
-
-function plural(n: number, word: string, pluralWord = `${word}s`): string {
-	return `${n} ${n === 1 ? word : pluralWord}`;
 }
 
 function listOf(items: string[], max: number): string {

@@ -19,6 +19,7 @@
 		SEVERITY_LABELS,
 		SEVERITY_ORDER,
 		SEVERITY_FILL,
+		severityRank,
 		TEMPLATE_SET_ICONS,
 		VULN_STAGE
 	} from '$lib/config/vulnerabilities';
@@ -140,9 +141,7 @@
 		patch({
 			severities: base.severities.includes(value)
 				? base.severities.filter((s) => s !== value)
-				: [...base.severities, value].sort(
-						(a, b) => SEVERITY_ORDER.indexOf(a) - SEVERITY_ORDER.indexOf(b)
-					)
+				: [...base.severities, value].sort((a, b) => severityRank(a) - severityRank(b))
 		});
 	}
 

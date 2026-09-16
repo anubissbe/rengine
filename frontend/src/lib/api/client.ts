@@ -22,6 +22,12 @@ async function timedFetch(url: string, init: RequestInit, timeoutMs: number): Pr
 
 type RefreshResult = 'ok' | 'expired' | 'error';
 
+function sessionError(result: RefreshResult): string {
+	return result === 'expired'
+		? 'Session expired. Sign in again.'
+		: 'Session not refreshed. Sign in again.';
+}
+
 function extractErrorMessage(detail: unknown, status: number): string {
 	if (typeof detail === 'string' && detail.trim()) return detail;
 	if (Array.isArray(detail)) {
@@ -65,11 +71,7 @@ class ApiClient {
 				if (result === 'ok') {
 					return this.request<T>(endpoint, options, true, timeoutMs);
 				}
-				throw new Error(
-					result === 'expired'
-						? 'Session expired. Sign in again.'
-						: 'Session not refreshed. Sign in again.'
-				);
+				throw new Error(sessionError(result));
 			}
 
 			const errorData = await response.json().catch(() => ({}));
@@ -138,48 +140,31 @@ class ApiClient {
 		return pending;
 	}
 
-	async text(endpoint: string, isRetry = false): Promise<string> {
+	/** The response itself, refreshed once on a 401, for bodies that are not JSON. */
+	private async raw(endpoint: string, isRetry = false): Promise<Response> {
 		const response = await timedFetch(
 			`${this.baseUrl}${endpoint}`,
 			{ credentials: 'include' },
 			REQUEST_TIMEOUT_MS
 		);
-		if (response.ok) return response.text();
+		if (response.ok) return response;
 
-		if (response.status === 401 && !isRetry) {
+		if (response.status === 401 && !isRetry && !this.isAuthEndpoint(endpoint)) {
 			const result = await this.tryRefresh();
-			if (result === 'ok') return this.text(endpoint, true);
-			throw new Error(
-				result === 'expired'
-					? 'Session expired. Sign in again.'
-					: 'Session not refreshed. Sign in again.'
-			);
+			if (result === 'ok') return this.raw(endpoint, true);
+			throw new Error(sessionError(result));
 		}
 
 		const errorData = await response.json().catch(() => ({}));
 		throw new Error(extractErrorMessage(errorData?.detail, response.status));
 	}
 
-	async bytes(endpoint: string, isRetry = false): Promise<ArrayBuffer> {
-		const response = await timedFetch(
-			`${this.baseUrl}${endpoint}`,
-			{ credentials: 'include' },
-			REQUEST_TIMEOUT_MS
-		);
-		if (response.ok) return response.arrayBuffer();
+	async text(endpoint: string): Promise<string> {
+		return (await this.raw(endpoint)).text();
+	}
 
-		if (response.status === 401 && !isRetry) {
-			const result = await this.tryRefresh();
-			if (result === 'ok') return this.bytes(endpoint, true);
-			throw new Error(
-				result === 'expired'
-					? 'Session expired. Sign in again.'
-					: 'Session not refreshed. Sign in again.'
-			);
-		}
-
-		const errorData = await response.json().catch(() => ({}));
-		throw new Error(extractErrorMessage(errorData?.detail, response.status));
+	async bytes(endpoint: string): Promise<ArrayBuffer> {
+		return (await this.raw(endpoint)).arrayBuffer();
 	}
 
 	post<T>(endpoint: string, data?: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
