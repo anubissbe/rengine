@@ -11,7 +11,7 @@ from sqlalchemy import bindparam, delete, or_, select, text
 from sqlalchemy.orm import Session
 
 from interest import InterestContext, RawSignal, providers
-from interest.presets import PRESETS, drift
+from interest.presets import PRESETS, drift, row_values
 from shared.definitions.interest import (
     BAND_FLOOR,
     BAND_ORDER,
@@ -124,23 +124,7 @@ def ensure_builtin(session: Session) -> int:
                 session.add(current)
                 added += 1
             continue
-        session.add(
-            InterestRule(
-                project_id=None,
-                name=preset.name,
-                description=preset.description,
-                mode=preset.mode,
-                query=preset.query,
-                keywords=list(preset.keywords),
-                keyword_fields=list(preset.keyword_fields),
-                live_only=preset.live_only,
-                kind=preset.kind,
-                weight=preset.weight,
-                enabled=preset.enabled,
-                builtin=True,
-                notify=preset.notify,
-            )
-        )
+        session.add(InterestRule(**row_values(preset)))
         added += 1
     if added:
         session.commit()

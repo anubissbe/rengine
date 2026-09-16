@@ -218,6 +218,25 @@ USER_FIELDS: tuple[str, ...] = (
 )
 
 
+def row_values(preset: Preset) -> dict:
+    """The shipped rule a preset stands for, as column values."""
+    return {
+        "project_id": None,
+        "name": preset.name,
+        "description": preset.description,
+        "mode": preset.mode,
+        "query": preset.query,
+        "keywords": list(preset.keywords),
+        "keyword_fields": list(preset.keyword_fields),
+        "live_only": preset.live_only,
+        "kind": preset.kind,
+        "weight": preset.weight,
+        "enabled": preset.enabled,
+        "builtin": True,
+        "notify": preset.notify,
+    }
+
+
 def drift(rule, preset: Preset) -> dict:
     """Fields a shipped rule should adopt from the current preset."""
     changed = {}

@@ -141,7 +141,7 @@ class InterestService:
         self.session = session
 
     async def ensure_builtin(self) -> None:
-        from interest.presets import PRESETS, drift  # noqa: PLC0415
+        from interest.presets import PRESETS, drift, row_values  # noqa: PLC0415
 
         rows = {
             row.name: row
@@ -162,23 +162,7 @@ class InterestService:
                     current.updated_at = utc_now()
                     changed = True
                 continue
-            self.session.add(
-                InterestRule(
-                    project_id=None,
-                    name=preset.name,
-                    description=preset.description,
-                    mode=preset.mode,
-                    query=preset.query,
-                    keywords=list(preset.keywords),
-                    keyword_fields=list(preset.keyword_fields),
-                    live_only=preset.live_only,
-                    kind=preset.kind,
-                    weight=preset.weight,
-                    enabled=preset.enabled,
-                    builtin=True,
-                    notify=preset.notify,
-                )
-            )
+            self.session.add(InterestRule(**row_values(preset)))
             changed = True
         if changed:
             await self.session.commit()
