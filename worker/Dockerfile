@@ -103,5 +103,16 @@ RUN uv sync --no-install-project
 CMD ["uv", "run", "celery", "-A", "app.celery", "worker", "--loglevel=INFO"]
 
 
-# stages/, reports/, interest/ and toolbox/ are mounted in dev; a prod stage must
-# COPY them and keep PYTHONPATH=/app
+##################################################################
+# Production: what dev mounts from the host is copied in
+##################################################################
+
+FROM development AS production
+
+COPY worker/app /app/app
+COPY stages /app/stages
+COPY reports /app/reports
+COPY interest /app/interest
+COPY toolbox /app/toolbox
+
+CMD ["uv", "run", "celery", "-A", "app.celery", "worker", "--loglevel=INFO"]

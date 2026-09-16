@@ -20,10 +20,10 @@ jobs:
         include:
           - image: api
             dockerfile: api/Dockerfile
-            target: development
+            target: production
           - image: worker
             dockerfile: worker/Dockerfile
-            target: development
+            target: production
           - image: frontend
             dockerfile: frontend/Dockerfile.dev
             target: ""

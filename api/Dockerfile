@@ -29,5 +29,24 @@ COPY api/entrypoint.sh /app/entrypoint.sh
 CMD ["/app/entrypoint.sh"]
 
 
-# stages/, reports/, interest/, mcp/, connectors/, toolbox/ and binaries/ are mounted in
-# dev; a prod stage must COPY them and keep PYTHONPATH=/app
+##################################################################
+# Production: what dev mounts from the host is copied in
+##################################################################
+
+FROM development AS production
+
+COPY api/app /app/app
+COPY stages /app/stages
+COPY reports /app/reports
+COPY interest /app/interest
+COPY mcp /app/mcp
+COPY channels /app/channels
+COPY connectors /app/connectors
+COPY toolbox /app/toolbox
+COPY binaries /app/binaries
+COPY alembic /app/alembic
+COPY alembic.ini /app/alembic.ini
+
+ENV API_RELOAD=false
+
+CMD ["/app/entrypoint.sh"]

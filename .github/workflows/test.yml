@@ -18,6 +18,9 @@ jobs:
   lint:
     name: 🧹 Lint
     runs-on: ubuntu-latest
+    env:
+      PACKAGES: api shared reports worker stages tools toolbox interest mcp channels connectors tests
+      RUFF: ruff@0.14.14
     steps:
       - name: 📥 Checkout the git repo
         uses: actions/checkout@v4
@@ -26,10 +29,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: 🧹 ruff check
-        run: uvx ruff@0.14.14 check api shared reports worker interest connectors mcp channels toolbox stages tools tests
+        run: uvx $RUFF check $PACKAGES
 
       - name: 🎨 ruff format
-        run: uvx ruff@0.14.14 format --check api shared reports worker interest connectors mcp channels toolbox stages tools tests
+        run: uvx $RUFF format --check $PACKAGES
 
   frontend:
     name: 🎨 Frontend checks
