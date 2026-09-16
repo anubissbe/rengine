@@ -62,6 +62,11 @@ async def resolve_user(token: str, session: AsyncSession) -> User:
             headers=BEARER_HEADERS,
         )
 
+    return await user_for_payload(payload, session)
+
+
+async def user_for_payload(payload: dict, session: AsyncSession) -> User:
+    """The account a validated token names."""
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise HTTPException(
@@ -79,16 +84,13 @@ async def resolve_user(token: str, session: AsyncSession) -> User:
             headers=BEARER_HEADERS,
         ) from e
 
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
+    user = await session.scalar(select(User).where(User.id == user_id))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
             headers=BEARER_HEADERS,
         )
-
     return user
 
 

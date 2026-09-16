@@ -1,13 +1,18 @@
 from datetime import timedelta
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.api.deps import BEARER_HEADERS, CurrentSuperuser, CurrentUser, security
+from app.api.deps import (
+    BEARER_HEADERS,
+    CurrentSuperuser,
+    CurrentUser,
+    security,
+    user_for_payload,
+)
 from app.config import settings
 from app.core.database import get_session
 from app.core.ratelimit import (
@@ -179,33 +184,7 @@ async def refresh_access_token(
             headers=BEARER_HEADERS,
         )
 
-    user_id_str = payload.get("sub")
-    if not user_id_str:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-            headers=BEARER_HEADERS,
-        )
-
-    try:
-        user_id = UUID(user_id_str)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token",
-            headers=BEARER_HEADERS,
-        ) from e
-
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers=BEARER_HEADERS,
-        )
-
+    user = await user_for_payload(payload, session)
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

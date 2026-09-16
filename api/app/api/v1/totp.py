@@ -1,12 +1,10 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
-from app.api.deps import BEARER_HEADERS, CurrentUser
+from app.api.deps import BEARER_HEADERS, CurrentUser, user_for_payload
 from app.api.v1.auth import set_auth_cookies
 from app.core.database import get_session
 from app.core.ratelimit import (
@@ -23,7 +21,6 @@ from app.core.security import (
     decode_token,
 )
 from app.services.totp import TOTPService
-from shared.models.user import User
 from shared.schemas.auth import LoginResponse, TwoFactorLoginRequest
 from shared.utils.datetime import utc_now
 
@@ -125,27 +122,8 @@ async def login_2fa(
             headers=BEARER_HEADERS,
         )
 
-    user_id_str = payload.get("sub")
-    if not user_id_str:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-            headers=BEARER_HEADERS,
-        )
-
-    try:
-        user_id = UUID(user_id_str)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token",
-            headers=BEARER_HEADERS,
-        ) from e
-
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user or not user.is_active:
+    user = await user_for_payload(payload, session)
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
