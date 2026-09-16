@@ -25,9 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.services.asset_query.predicates import (
+    answered,
     cert_state,
     live,
-    resolved,
     vuln_seen_earlier,
 )
 from app.services.dashboard import DashboardService
@@ -42,8 +42,6 @@ from shared.definitions.dashboard import (
     EXPIRING_CERT_QUERY,
     EXPIRING_DAYS,
     EXPOSURE_TOP,
-    FUNNEL_LABELS,
-    FUNNEL_QUERIES,
     ITEMS_CAP,
     QUEUE_LIMIT,
     RUNS_PER_TARGET,
@@ -53,7 +51,6 @@ from shared.definitions.dashboard import (
     TIER_ATTEND_EPSS,
     TIER_ORDER,
     WINDOW_DELTAS,
-    FunnelStep,
     QueueTier,
     cert_bucket_query,
 )
@@ -65,7 +62,6 @@ from shared.definitions.ports import (
     ServiceClass,
     service_label,
 )
-from shared.definitions.scan_surface import SurfaceClass
 from shared.definitions.surface import SURFACE_LABELS, SURFACE_ORDER, SurfaceDimension
 from shared.definitions.vulnerabilities import (
     ACTIONABLE_SEVERITIES,
@@ -92,8 +88,6 @@ from shared.models.dashboard import (
     DashboardExposure,
     DashboardExposureBand,
     DashboardFinding,
-    DashboardFunnel,
-    DashboardFunnelStep,
     DashboardGeo,
     DashboardOverview,
     DashboardRisk,
@@ -110,7 +104,6 @@ from shared.models.port import Port
 from shared.models.scan import Scan
 from shared.models.scan_activity import ScanActivity
 from shared.models.scan_schedule import ScanSchedule
-from shared.models.scan_surface import ScanSurfaceItem
 from shared.models.secret import Secret
 from shared.models.software import SoftwareCve
 from shared.models.subdomain import Subdomain
@@ -263,8 +256,8 @@ class DashboardOverviewService:
                 expiring=DashboardCertSignal(query=EXPIRING_CERT_QUERY),
             ),
         )
-        out.first_run = await self._first_run()
         out.targets_total = len(targets)
+        out.first_run = not targets and not runs_total
         out.targets_scanned = sum(1 for t in targets if runs_by_target.get(t.id))
         by_type: dict[str, int] = defaultdict(int)
         for t in targets:
@@ -283,9 +276,7 @@ class DashboardOverviewService:
             for key, per_target in covered.items()
         }
         out.surface = self._surface(counts, latest_cover, firsts, baselines, in_window)
-        out.funnel = await self._funnel(
-            out.surface, latest_cover, scans, baselines, in_window
-        )
+        out.answering_hosts = await self._answering(list(latest_cover[WEB].values()))
 
         risk_ids = list(latest_cover[VULNS].values())
         out.risk = await self._risk(risk_ids, firsts, baselines, in_window, cutoff)
@@ -430,13 +421,6 @@ class DashboardOverviewService:
             targets.append(target)
             expires[target.id] = expires_at
         return targets, expires
-
-    async def _first_run(self) -> bool:
-        return not await self.session.scalar(
-            select(
-                exists().where(Scan.status == ScanStatus.COMPLETED.value, census_only())
-            )
-        )
 
     async def _runs(
         self, project_id: UUID, series_cutoff: datetime
@@ -1256,115 +1240,18 @@ class DashboardOverviewService:
                 out[sid][key] = out[sid].get(key, 0) + int(n)
         return out
 
-    async def _funnel(
-        self,
-        surface: list[DashboardSurfaceMetric],
-        latest_cover: dict[str, dict[UUID, UUID]],
-        scans: dict[UUID, Scan],
-        baselines: dict[str, set[UUID]],
-        in_window: list[Scan],
-    ) -> DashboardFunnel:
-        """From every name found to the ones a scanner faulted."""
-        web_ids = list(latest_cover[WEB].values())
-        vuln_ids = list(latest_cover[VULNS].values())
-        names = next((m for m in surface if m.key == WEB), None)
-        counts = dict.fromkeys(FunnelStep, 0)
-        news: dict[FunnelStep, int | None] = dict.fromkeys(FunnelStep, None)
-        counts[FunnelStep.NAMES] = names.value if names else 0
-        news[FunnelStep.NAMES] = names.new_in_window if names else 0
-        if web_ids:
-            on_host = exists(
-                select(1).where(
-                    Vulnerability.scan_id.in_(vuln_ids),
-                    Vulnerability.host == Subdomain.name,
-                    not_(_suppressed()),
-                )
+    async def _answering(self, web_ids: list[UUID]) -> int:
+        """Hosts that answered on HTTP at all, the `is:web` count."""
+        if not web_ids:
+            return 0
+        return int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Subdomain)
+                .where(Subdomain.scan_id.in_(web_ids), answered())
             )
-            row = (
-                await self.session.execute(
-                    select(
-                        func.count().filter(resolved()),
-                        func.count().filter(live()),
-                        func.count().filter(on_host)
-                        if vuln_ids
-                        else func.count().filter(text("false")),
-                    ).where(Subdomain.scan_id.in_(web_ids))
-                )
-            ).one()
-            counts[FunnelStep.RESOLVED] = int(row[0] or 0)
-            counts[FunnelStep.LIVE] = int(row[1] or 0)
-            counts[FunnelStep.FINDINGS] = int(row[2] or 0)
-            window_ids = [
-                s.id for s in in_window if s.id in baselines[WEB] and s.id in web_ids
-            ]
-            fresh = await self._first_seen_hosts(window_ids, scans)
-            news[FunnelStep.RESOLVED] = fresh[0]
-            news[FunnelStep.LIVE] = fresh[1]
-        if vuln_ids:
-            counts[FunnelStep.ORIGINS] = int(
-                await self.session.scalar(
-                    select(func.count(func.distinct(ScanSurfaceItem.host)))
-                    .select_from(ScanSurfaceItem)
-                    .where(
-                        ScanSurfaceItem.scan_id.in_(vuln_ids),
-                        ScanSurfaceItem.class_ == SurfaceClass.ROOT.value,
-                        ScanSurfaceItem.drop_reason.is_(None),
-                    )
-                )
-                or 0
-            )
-        tabs = {
-            FunnelStep.NAMES: SurfaceDimension.WEB_ASSETS.value,
-            FunnelStep.RESOLVED: SurfaceDimension.WEB_ASSETS.value,
-            FunnelStep.LIVE: SurfaceDimension.WEB_ASSETS.value,
-            FunnelStep.ORIGINS: SurfaceDimension.VULNERABILITIES.value,
-            FunnelStep.FINDINGS: SurfaceDimension.WEB_ASSETS.value,
-        }
-        return DashboardFunnel(
-            steps=[
-                DashboardFunnelStep(
-                    key=step.value,
-                    label=FUNNEL_LABELS[step.value],
-                    count=counts[step],
-                    new_in_window=news[step],
-                    query=FUNNEL_QUERIES[step.value],
-                    tab=tabs[step],
-                )
-                for step in FunnelStep
-            ]
+            or 0
         )
-
-    async def _first_seen_hosts(
-        self, scan_ids: list[UUID], scans: dict[UUID, Scan]
-    ) -> tuple[int, int]:
-        """Hosts the window's covering runs were the first to report, resolved and live."""
-        if not scan_ids:
-            return 0, 0
-        by_target: dict[UUID, list[UUID]] = defaultdict(list)
-        for sid in scan_ids:
-            by_target[scans[sid].target_id].append(sid)
-        n_resolved = n_live = 0
-        for target_id, sids in by_target.items():
-            earlier = aliased(Subdomain)
-            seen_before = exists(
-                select(1).where(
-                    earlier.target_id == target_id,
-                    earlier.name == Subdomain.name,
-                    earlier.scan_id != Subdomain.scan_id,
-                    earlier.discovered_at < Subdomain.discovered_at,
-                )
-            )
-            row = (
-                await self.session.execute(
-                    select(
-                        func.count().filter(resolved()),
-                        func.count().filter(live()),
-                    ).where(Subdomain.scan_id.in_(sids), not_(seen_before))
-                )
-            ).one()
-            n_resolved += int(row[0] or 0)
-            n_live += int(row[1] or 0)
-        return n_resolved, n_live
 
 
 def _stale_row(target: Target, last: datetime | None) -> StaleTarget:

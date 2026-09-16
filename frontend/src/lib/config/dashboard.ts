@@ -16,35 +16,6 @@ export const TIER_HELP: Record<QueueTier, string> = {
 	[QueueTier.Track]: 'Everything else'
 };
 
-export enum FunnelStep {
-	Names = 'names',
-	Resolved = 'resolved',
-	Live = 'live',
-	Origins = 'origins',
-	Findings = 'findings'
-}
-export const FUNNEL_LABELS: Record<FunnelStep, string> = {
-	[FunnelStep.Names]: 'Names found',
-	[FunnelStep.Resolved]: 'Resolve',
-	[FunnelStep.Live]: 'Answer HTTP',
-	[FunnelStep.Origins]: 'Distinct origins',
-	[FunnelStep.Findings]: 'With a finding'
-};
-export const FUNNEL_QUERY: Record<FunnelStep, string | null> = {
-	[FunnelStep.Names]: '',
-	[FunnelStep.Resolved]: 'is:resolved',
-	[FunnelStep.Live]: 'is:live',
-	[FunnelStep.Origins]: null,
-	[FunnelStep.Findings]: 'is:vulnerable'
-};
-export const FUNNEL_DROP: Record<FunnelStep, string | null> = {
-	[FunnelStep.Names]: 'unresolved',
-	[FunnelStep.Resolved]: 'no HTTP answer',
-	[FunnelStep.Live]: 'share an origin',
-	[FunnelStep.Origins]: 'no finding',
-	[FunnelStep.Findings]: null
-};
-
 export enum ActivityKind {
 	Run = 'run',
 	Watch = 'watch',

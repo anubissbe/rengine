@@ -205,19 +205,6 @@ class DashboardDay(BaseModel):
     findings: dict[str, int] = Field(default_factory=dict)
 
 
-class DashboardFunnelStep(BaseModel):
-    key: str
-    label: str
-    count: int = 0
-    new_in_window: int | None = None
-    query: str | None = None
-    tab: str | None = None
-
-
-class DashboardFunnel(BaseModel):
-    steps: list[DashboardFunnelStep] = Field(default_factory=list)
-
-
 class DashboardTargetRow(BaseModel):
     id: uuid.UUID
     value: str
@@ -246,7 +233,7 @@ class DashboardOverview(BaseModel):
     failed_in_window: int = 0
     last_completed_at: datetime | None = None
     surface: list[DashboardSurfaceMetric] = Field(default_factory=list)
-    funnel: DashboardFunnel = Field(default_factory=DashboardFunnel)
+    answering_hosts: int = 0
     risk: DashboardRisk = Field(default_factory=DashboardRisk)
     signals: DashboardSignals
     never_scanned: list[StaleTarget] = Field(default_factory=list)

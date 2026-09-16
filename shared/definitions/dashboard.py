@@ -63,29 +63,6 @@ TIER_ACT_EPSS = 0.088
 TIER_ATTEND_EPSS = 0.01
 
 
-class FunnelStep(StrEnum):
-    NAMES = "names"
-    RESOLVED = "resolved"
-    LIVE = "live"
-    ORIGINS = "origins"
-    FINDINGS = "findings"
-
-
-FUNNEL_LABELS: dict[str, str] = {
-    FunnelStep.NAMES.value: "Names found",
-    FunnelStep.RESOLVED.value: "Resolve",
-    FunnelStep.LIVE.value: "Answer HTTP",
-    FunnelStep.ORIGINS.value: "Distinct origins",
-    FunnelStep.FINDINGS.value: "With a finding",
-}
-FUNNEL_QUERIES: dict[str, str | None] = {
-    FunnelStep.NAMES.value: "",
-    FunnelStep.RESOLVED.value: "is:resolved",
-    FunnelStep.LIVE.value: "is:live",
-    FunnelStep.ORIGINS.value: None,
-    FunnelStep.FINDINGS.value: "is:vulnerable",
-}
-
 # (key, label, lower bound in days, upper bound in days); None is open
 CERT_BUCKETS: tuple[tuple[str, str, int | None, int | None], ...] = (
     ("expired", "Expired", None, 0),

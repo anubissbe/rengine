@@ -7,7 +7,6 @@
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
 	import * as Empty from '$lib/components/ui/empty';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { projectsStore } from '$lib/stores/projects.svelte';

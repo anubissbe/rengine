@@ -33,6 +33,7 @@ from app.services.asset_query import (
     count_queries,
     parse_query,
     query_error_for,
+    syntax_error,
     vuln_suppressed,
 )
 from app.services.asset_query import predicates as preds
@@ -324,11 +325,7 @@ class SubdomainService:
             node = parse_query(f.q)
             predicate = compile_query(node, QueryContext(scope=scope, now=now))
         except QuerySyntaxError as exc:
-            return SubdomainSearchResult(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return SubdomainSearchResult(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 
@@ -1079,21 +1076,15 @@ class SubdomainService:
     async def insights(self, project_id: UUID, scan_id: UUID) -> SubdomainInsights:
         now = utc_now()
         scope = (Subdomain.project_id == project_id, Subdomain.scan_id == scan_id)
-        live = and_(
-            Subdomain.http_status >= _HTTP_OK, Subdomain.http_status < _HTTP_CLIENT
-        )
+        live = preds.live()
 
         counts = (
             await self.session.execute(
                 select(
                     func.count().label("total"),
                     func.count().filter(live).label("live"),
-                    func.count().filter(Subdomain.http_status.isnot(None)).label("web"),
-                    func.count()
-                    .filter(
-                        func.jsonb_array_length(cast(Subdomain.resolved_ips, JSONB)) > 0
-                    )
-                    .label("resolved"),
+                    func.count().filter(preds.answered()).label("web"),
+                    func.count().filter(preds.resolved()).label("resolved"),
                     func.count()
                     .filter(
                         and_(

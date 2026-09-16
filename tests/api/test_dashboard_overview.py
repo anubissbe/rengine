@@ -80,26 +80,20 @@ async def test_newness_is_judged_per_target(estate, now):
     assert web.new_in_window == 1, "two.com has no baseline and contributes nothing"
 
 
-def _step(overview, key: str):
-    return next(s for s in overview.funnel.steps if s.key == key)
-
-
-async def test_funnel_counts_names_resolved_live_and_faulted(estate, now):
+async def test_answering_hosts_counts_every_http_answer_not_only_2xx(estate, now):
     await estate.scan("example.com", "run", at=now)
     await estate.hosts("run", ["dead.example.com"], at=now)
     await estate.hosts("run", ["idle.example.com"], at=now, ips=["10.0.0.1"])
     await estate.hosts("run", ["www.example.com"], at=now, ips=["10.0.0.2"], status=200)
-    await estate.vulns("run", [("xss", "high")], at=now, host="www.example.com")
+    await estate.hosts(
+        "run", ["deny.example.com"], at=now, ips=["10.0.0.3"], status=403
+    )
 
     out = await DashboardOverviewService(estate.session).overview(
         estate.project_id, "7d"
     )
 
-    assert _step(out, "names").count == 3
-    assert _step(out, "resolved").count == 2
-    assert _step(out, "live").count == 1
-    assert _step(out, "findings").count == 1
-    assert _step(out, "names").new_in_window == 0
+    assert out.answering_hosts == 2, "a 403 answered; is:live would have hidden it"
 
 
 async def test_retired_counts_what_the_previous_run_held(estate, now):

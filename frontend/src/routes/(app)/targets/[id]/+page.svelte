@@ -41,11 +41,7 @@
 	import type { HostingComposition } from '$lib/types/hosting';
 	import type { InterestPage } from '$lib/types/interest';
 	import type { SoftwareCoverage, SoftwareFacets } from '$lib/types/software';
-	import type {
-		DashboardCertBucket,
-		DashboardExposure,
-		DashboardFunnel
-	} from '$lib/types/dashboard';
+	import type { DashboardCertBucket, DashboardExposure } from '$lib/types/dashboard';
 	import type { Facet, HygieneSummary } from '$lib/utilities/scan-insights';
 	import type { DomainPostureSummary } from '$lib/types/domain-posture';
 	import type { IpFacetSet } from '$lib/utilities/ip-groups';
@@ -74,7 +70,9 @@
 	import EstateTray from '$lib/components/targets/estate-tray.svelte';
 	import ActivityCell from '$lib/components/targets/target-detail/overview/activity-cell.svelte';
 	import RunsCell from '$lib/components/targets/target-detail/overview/runs-cell.svelte';
-	import FunnelCell from '$lib/components/dashboard/funnel-cell.svelte';
+	import ReachabilityCell, {
+		reachabilityStates
+	} from '$lib/components/targets/target-detail/overview/reachability-cell.svelte';
 	import GeoCell from '$lib/components/dashboard/geo-cell.svelte';
 	import ServicesCell from '$lib/components/dashboard/services-cell.svelte';
 	import TechCell from '$lib/components/dashboard/tech-cell.svelte';
@@ -94,7 +92,6 @@
 	import BgpTab from '$lib/components/targets/target-detail/bgp/bgp-tab.svelte';
 	import { ROUTES, routeLabels } from '$lib/config/routes';
 	import { SURFACE, SurfaceDimension } from '$lib/config/surface';
-	import { FUNNEL_LABELS, FUNNEL_QUERY, FunnelStep } from '$lib/config/dashboard';
 	import type { IconComponent } from '$lib/config/icons';
 	import { NOW_TICK_MS } from '$lib/constants';
 	import { isLiveStatus } from '$lib/utilities/scan-status';
@@ -131,12 +128,6 @@
 		d90: 'quarter',
 		ok: 'later'
 	};
-	const FUNNEL_STEPS = [
-		FunnelStep.Names,
-		FunnelStep.Resolved,
-		FunnelStep.Live,
-		FunnelStep.Findings
-	] as const;
 	const WEB = SURFACE[SurfaceDimension.WEB_ASSETS];
 
 	const targetId = $derived(page.params.id ?? '');
@@ -168,7 +159,7 @@
 	let posture = $state<DomainPostureSummary | null>(null);
 	let postureHosts = $state<HygieneSummary | null>(null);
 	let certBuckets = $state<DashboardCertBucket[] | null>(null);
-	let funnel = $state<DashboardFunnel | null>(null);
+	let reach = $state<Record<string, number> | null>(null);
 	let exposures = $state<InterestPage | null>(null);
 	let exposure = $state<ScanExposure | null>(null);
 	let vulns = $state<ScanVulnerabilities | null>(null);
@@ -274,7 +265,10 @@
 	let completedRuns = $derived(
 		history.filter((s) => s.status === 'completed' && s.scope !== 'focused').length
 	);
-	let showFunnel = $derived(!!funnel);
+	let showReach = $derived(!!reach && !!webScanId);
+	let webObservedAt = $derived(
+		summary?.surface.find((m) => m.key === SurfaceDimension.WEB_ASSETS)?.observed_at ?? null
+	);
 	let showGeo = $derived((ipFacets?.country.length ?? 0) > 0);
 	let showFindings = $derived(!!vulnScanId && !!summary);
 	let showPosture = $derived(
@@ -290,6 +284,7 @@
 	let showExposures = $derived((exposures?.summary.total ?? 0) > 0);
 	let compositionKeys = $derived(
 		[
+			showGeo && 'geo',
 			showHosting && 'hosting',
 			showServices && 'services',
 			showTech && 'tech',
@@ -460,22 +455,6 @@
 		}));
 	}
 
-	function funnelOf(counts: Record<string, number>, names: number): DashboardFunnel {
-		return {
-			steps: FUNNEL_STEPS.map((key) => {
-				const query = FUNNEL_QUERY[key] ?? '';
-				return {
-					key,
-					label: FUNNEL_LABELS[key],
-					count: query ? (counts[query] ?? 0) : names,
-					new_in_window: null,
-					query,
-					tab: WEB.key
-				};
-			})
-		};
-	}
-
 	let estateFor: string | null = null;
 	async function fetchEstate(scanId: string | null) {
 		const project = projectsStore.activeProject;
@@ -493,8 +472,7 @@
 		if (!project || webFor === scanId) return;
 		webFor = scanId;
 		extrasLoading = true;
-		const names = summary?.surface.find((m) => m.key === SurfaceDimension.WEB_ASSETS)?.value ?? 0;
-		const funnelQueries = FUNNEL_STEPS.map((k) => FUNNEL_QUERY[k]).filter((q): q is string => !!q);
+		const reachQueries = reachabilityStates(showDns).map((s) => s.query);
 		await Promise.all([
 			settle('Hosting', subdomainsApi.hosting(project.id, scanId), (h) => (hosting = h)),
 			settle(
@@ -514,11 +492,9 @@
 				subdomainsApi.insights(project.id, scanId).then((i) => certBucketsOf(i.cert_buckets)),
 				(b) => (certBuckets = b)
 			),
-			settle(
-				'Attack surface funnel',
-				subdomainsApi.counts(project.id, scanId, funnelQueries),
-				(r) => (funnel = funnelOf(r.counts, names))
-			),
+			settle('Reachability', subdomainsApi.counts(project.id, scanId, reachQueries), (r) => {
+				reach = r.counts;
+			}),
 			settle(
 				'Exposures',
 				interestApi.scan(scanId, { limit: EXPOSURE_ROWS }),
@@ -985,29 +961,28 @@
 						/>
 					{/if}
 
-					{#if showFunnel || showGeo || showFindings || showPosture}
+					{#if showReach && reach && webScanId}
 						<div class="grid grid-cols-12 overflow-hidden rounded-xl border bg-card">
-							{#if showFunnel && funnel}
-								<FunnelCell
-									{funnel}
-									scanId={webScanId}
-									class="col-span-12 {showGeo ? 'xl:col-span-8' : ''}"
-								/>
-							{/if}
-							{#if showGeo}
-								<GeoCell
-									countries={ipFacets?.country ?? null}
-									scanId={ipsScanId}
-									class="col-span-12 {showFunnel ? 'lg:col-span-6 xl:col-span-4' : ''}"
-								/>
-							{/if}
+							<ReachabilityCell
+								counts={reach}
+								isDomain={showDns}
+								scanId={webScanId}
+								observedAt={webObservedAt}
+								loading={extrasLoading}
+								class="col-span-12"
+							/>
+						</div>
+					{/if}
+
+					{#if showFindings || showPosture}
+						<div class="grid grid-cols-12 overflow-hidden rounded-xl border bg-card">
 							{#if showFindings && summary && vulnScanId}
 								<FindingsCell
 									risk={summary.risk}
 									{vulns}
 									scanId={vulnScanId}
 									loading={extrasLoading}
-									class="col-span-12 {showPosture ? 'xl:col-span-8' : ''}"
+									class="col-span-12 {showPosture ? 'lg:col-span-6 xl:col-span-8' : ''}"
 								/>
 							{/if}
 							{#if showPosture}
@@ -1028,7 +1003,9 @@
 						<div class="grid grid-cols-12 overflow-hidden rounded-xl border bg-card">
 							{#each compositionKeys as key, i (key)}
 								{@const cls = compositionSpans[i]}
-								{#if key === 'hosting' && hosting && webScanId}
+								{#if key === 'geo'}
+									<GeoCell countries={ipFacets?.country ?? null} scanId={ipsScanId} class={cls} />
+								{:else if key === 'hosting' && hosting && webScanId}
 									<HostingCell {hosting} scanId={webScanId} onPick={pickHosting} class={cls} />
 								{:else if key === 'services' && servicesExposure}
 									<ServicesCell exposure={servicesExposure} scanId={servicesScanId} class={cls} />

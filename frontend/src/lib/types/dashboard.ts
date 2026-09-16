@@ -1,6 +1,6 @@
 import type { ScanStatus } from './scan';
 import type { SeverityCount } from '$lib/utilities/vulns';
-import type { ActivityKind, FunnelStep, QueueTier } from '$lib/config/dashboard';
+import type { ActivityKind, QueueTier } from '$lib/config/dashboard';
 
 export const DASHBOARD_WINDOWS = [
 	{ key: '7d', label: '7d', text: 'last 7 days', days: 7 },
@@ -169,19 +169,6 @@ export interface DashboardRisk {
 	queue: DashboardFinding[];
 }
 
-export interface DashboardFunnelStep {
-	key: FunnelStep;
-	label: string;
-	count: number;
-	new_in_window: number | null;
-	query: string | null;
-	tab: string | null;
-}
-
-export interface DashboardFunnel {
-	steps: DashboardFunnelStep[];
-}
-
 export interface DashboardGeo {
 	code: string;
 	count: number;
@@ -289,7 +276,7 @@ export interface DashboardOverview {
 	failed_in_window: number;
 	last_completed_at: string | null;
 	surface: DashboardSurfaceMetric[];
-	funnel: DashboardFunnel;
+	answering_hosts: number;
 	risk: DashboardRisk;
 	signals: DashboardSignals;
 	never_scanned: StaleTarget[];

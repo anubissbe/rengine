@@ -31,7 +31,7 @@
 	};
 	const MAX_RUNS = 3;
 
-	let liveCount = $derived(overview.funnel.steps.find((s) => s.key === 'live')?.count ?? 0);
+	let answering = $derived(overview.answering_hosts);
 	interface Row {
 		key: string;
 		label: string;
@@ -58,8 +58,8 @@
 			const metric = overview.surface.find((m) => m.key === key);
 			if (!metric) continue;
 			let sub: string | null = null;
-			if (key === SurfaceDimension.WEB_ASSETS && liveCount)
-				sub = `${liveCount.toLocaleString()} answering`;
+			if (key === SurfaceDimension.WEB_ASSETS && answering)
+				sub = `${answering.toLocaleString()} answering`;
 			if (key === SurfaceDimension.SERVICES && overview.exposure.sensitive)
 				sub = `${overview.exposure.sensitive.toLocaleString()} sensitive`;
 			if (key === SurfaceDimension.VULNERABILITIES) {
