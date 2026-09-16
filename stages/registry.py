@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import importlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +9,7 @@ from pathlib import Path
 import stages as stages_pkg
 from shared.definitions.intensity import PROFILES, RATE_TOOLS
 from shared.enums.scan import PHASE_ORDER, AssetKind, Intensity, StageGroup, StageRole
+from shared.plugins import classes_in_packages
 from stages.base import Stage
 from stages.config import StageConfig
 
@@ -68,43 +67,19 @@ _ROLES = frozenset(r.value for r in StageRole)
 _KINDS = frozenset(k.value for k in AssetKind)
 
 
-def _stage_dirs() -> list[str]:
-    names: set[str] = set()
-    for root in stages_pkg.__path__:
-        for entry in sorted(Path(root).iterdir()):
-            if entry.is_dir() and not entry.name.startswith(("_", ".")):
-                names.add(entry.name)
-    return sorted(names)
-
-
 def _stage_classes() -> list[type[Stage]]:
     found: dict[str, type[Stage]] = {}
-    for package in _stage_dirs():
-        namespaces = []
-        for module in (
-            f"stages.{package}",
-            f"stages.{package}.stage",
-            f"stages.{package}.engine",
+    for root in stages_pkg.__path__:
+        for obj in classes_in_packages(
+            "stages", Path(root), Stage, submodules=("stage", "engine")
         ):
-            with contextlib.suppress(ModuleNotFoundError):
-                namespaces.append(importlib.import_module(module))
-
-        for namespace in namespaces:
-            for obj in vars(namespace).values():
-                if (
-                    not isinstance(obj, type)
-                    or not issubclass(obj, Stage)
-                    or obj is Stage
-                    or getattr(obj, "__abstractmethods__", None)
-                ):
-                    continue
-                name = getattr(obj, "name", None)
-                if not name:
-                    msg = f"{obj.__qualname__} must set a `name`."
-                    raise StageRegistrationError(msg)
-                if found.setdefault(name, obj) is not obj:
-                    msg = f"Duplicate stage name {name!r}: {obj.__qualname__}."
-                    raise StageRegistrationError(msg)
+            name = getattr(obj, "name", None)
+            if not name:
+                msg = f"{obj.__qualname__} must set a `name`."
+                raise StageRegistrationError(msg)
+            if found.setdefault(name, obj) is not obj:
+                msg = f"Duplicate stage name {name!r}: {obj.__qualname__}."
+                raise StageRegistrationError(msg)
     return list(found.values())
 
 

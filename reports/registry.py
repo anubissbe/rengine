@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import importlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +10,7 @@ from reports.base import Section
 from reports.config import SectionConfig
 from shared.definitions.reports import SECTION_GROUP_ORDER
 from shared.models.report import SectionCatalogEntry, SectionField
+from shared.plugins import classes_in_packages
 
 SECTION_DIR = Path(__file__).resolve().parent / "sections"
 
@@ -52,42 +51,20 @@ class SectionSpec:
         return self.config_model.model_validate(raw or {})
 
 
-def _module_names() -> list[str]:
+def _classes() -> list[type[Section]]:
     if not SECTION_DIR.is_dir():
         return []
-    return sorted(
-        entry.name
-        for entry in SECTION_DIR.iterdir()
-        if entry.is_dir() and not entry.name.startswith(("_", "."))
-    )
-
-
-def _classes() -> list[type[Section]]:
     found: dict[str, type[Section]] = {}
-    for package in _module_names():
-        namespaces = []
-        for module in (
-            f"reports.sections.{package}.section",
-            f"reports.sections.{package}",
-        ):
-            with contextlib.suppress(ModuleNotFoundError):
-                namespaces.append(importlib.import_module(module))
-        for namespace in namespaces:
-            for obj in vars(namespace).values():
-                if (
-                    not isinstance(obj, type)
-                    or not issubclass(obj, Section)
-                    or obj is Section
-                    or getattr(obj, "__abstractmethods__", None)
-                ):
-                    continue
-                name = getattr(obj, "name", None)
-                if not name:
-                    msg = f"{obj.__qualname__} must set a `name`."
-                    raise SectionRegistrationError(msg)
-                if found.setdefault(name, obj) is not obj:
-                    msg = f"Duplicate section name {name!r}: {obj.__qualname__}."
-                    raise SectionRegistrationError(msg)
+    for obj in classes_in_packages(
+        "reports.sections", SECTION_DIR, Section, submodules=("section",)
+    ):
+        name = getattr(obj, "name", None)
+        if not name:
+            msg = f"{obj.__qualname__} must set a `name`."
+            raise SectionRegistrationError(msg)
+        if found.setdefault(name, obj) is not obj:
+            msg = f"Duplicate section name {name!r}: {obj.__qualname__}."
+            raise SectionRegistrationError(msg)
     return list(found.values())
 
 

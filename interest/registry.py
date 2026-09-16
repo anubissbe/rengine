@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import contextlib
-import importlib
 from functools import lru_cache
 from pathlib import Path
 
 from interest.base import InterestProvider
+from shared.plugins import classes_in_packages
 
 PROVIDER_DIR = Path(__file__).resolve().parent / "providers"
 
@@ -16,40 +15,20 @@ class ProviderRegistrationError(RuntimeError):
     """A provider module is invalid or duplicated."""
 
 
-def _package_names() -> list[str]:
+def _classes() -> list[type[InterestProvider]]:
     if not PROVIDER_DIR.is_dir():
         return []
-    return sorted(
-        entry.name
-        for entry in PROVIDER_DIR.iterdir()
-        if entry.is_dir() and not entry.name.startswith(("_", "."))
-    )
-
-
-def _classes() -> list[type[InterestProvider]]:
     found: dict[str, type[InterestProvider]] = {}
-    for package in _package_names():
-        namespaces = []
-        for module in (
-            f"interest.providers.{package}.provider",
-            f"interest.providers.{package}",
-        ):
-            with contextlib.suppress(ModuleNotFoundError):
-                namespaces.append(importlib.import_module(module))
-        for namespace in namespaces:
-            for obj in vars(namespace).values():
-                if (
-                    not isinstance(obj, type)
-                    or not issubclass(obj, InterestProvider)
-                    or obj is InterestProvider
-                    or not obj.name
-                ):
-                    continue
-                existing = found.get(obj.name)
-                if existing is not None and existing is not obj:
-                    msg = f"Two providers claim the name {obj.name!r}."
-                    raise ProviderRegistrationError(msg)
-                found[obj.name] = obj
+    for obj in classes_in_packages(
+        "interest.providers", PROVIDER_DIR, InterestProvider, submodules=("provider",)
+    ):
+        if not obj.name:
+            continue
+        existing = found.get(obj.name)
+        if existing is not None and existing is not obj:
+            msg = f"Two providers claim the name {obj.name!r}."
+            raise ProviderRegistrationError(msg)
+        found[obj.name] = obj
     return list(found.values())
 
 

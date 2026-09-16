@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
 import sys
 from functools import lru_cache
+from pathlib import Path
 
 from connectors.base import ProxyConnector
 from shared.definitions.connectors import ConnectorKind
 from shared.logging import get_logger
+from shared.plugins import classes_in_packages
 
 logger = get_logger(__name__)
 
@@ -30,27 +30,14 @@ def _validate(instance: ProxyConnector) -> None:
 
 @lru_cache(maxsize=1)
 def connectors() -> dict[str, ProxyConnector]:
-    package = sys.modules[__package__]
     found: dict[str, ProxyConnector] = {}
-    for module in pkgutil.iter_modules(package.__path__):
-        if not module.ispkg:
-            continue
-        try:
-            loaded = importlib.import_module(f"connectors.{module.name}.connector")
-        except Exception as exc:
-            logger.warning(
-                "connector module failed to import", module=module.name, error=str(exc)
-            )
-            continue
-        for value in vars(loaded).values():
-            if (
-                isinstance(value, type)
-                and issubclass(value, ProxyConnector)
-                and value is not ProxyConnector
-            ):
-                instance = value()
-                _validate(instance)
-                found[instance.kind] = instance
+    for root in sys.modules[__package__].__path__:
+        for cls in classes_in_packages(
+            __package__, Path(root), ProxyConnector, submodules=("connector",)
+        ):
+            instance = cls()
+            _validate(instance)
+            found[instance.kind] = instance
     return dict(sorted(found.items()))
 
 
