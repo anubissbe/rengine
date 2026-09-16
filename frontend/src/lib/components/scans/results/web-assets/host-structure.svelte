@@ -30,6 +30,7 @@
 		type EndpointTree
 	} from '$lib/utilities/endpoints';
 	import { SEARCH_DEBOUNCE_MS } from '$lib/utilities/scan-status';
+	import { afterPause } from '$lib/utilities/debounce';
 
 	interface Props {
 		host: string;
@@ -94,8 +95,7 @@
 
 	$effect(() => {
 		void sig;
-		const handle = setTimeout(() => untrack(load), search ? SEARCH_DEBOUNCE_MS : 0);
-		return () => clearTimeout(handle);
+		return afterPause(load, search ? SEARCH_DEBOUNCE_MS : 0);
 	});
 
 	$effect(() => {

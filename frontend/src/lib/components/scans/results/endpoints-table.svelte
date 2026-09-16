@@ -89,6 +89,7 @@
 	import type { Crumb } from './endpoints/outline-context';
 	import type { QueryError, QueryGroups, QueryLeads } from '$lib/types/asset-query';
 	import { RESULTS_PAGE_SIZE, SEARCH_DEBOUNCE_MS } from '$lib/utilities/scan-status';
+	import { afterPause } from '$lib/utilities/debounce';
 	import { LiveRefresh, Throttled } from '$lib/utilities/live-results';
 	import { formatShortDate } from '$lib/utilities/dates';
 
@@ -666,16 +667,14 @@
 		void treeSig;
 		if (!seen || !isTree) return;
 		if (treeSig === loadedTreeSig) return;
-		const handle = setTimeout(() => untrack(loadTree), SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(handle);
+		return afterPause(loadTree);
 	});
 
 	$effect(() => {
 		void hostsSig;
 		if (!seen || view !== 'hosts') return;
 		if (hostsSig === loadedHostsSig) return;
-		const handle = setTimeout(() => untrack(loadHosts), SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(handle);
+		return afterPause(loadHosts);
 	});
 
 	$effect(() => {
@@ -696,8 +695,7 @@
 			groupSet = null;
 			return;
 		}
-		const handle = setTimeout(() => untrack(loadGroups), SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(handle);
+		return afterPause(loadGroups);
 	});
 
 	function syncUrl() {
@@ -861,8 +859,7 @@
 		void goneSig;
 		if (!seen || !goneLens) return;
 		if (goneSig === loadedGoneSig) return;
-		const handle = setTimeout(() => untrack(loadGone), SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(handle);
+		return afterPause(loadGone);
 	});
 
 	$effect(() => {

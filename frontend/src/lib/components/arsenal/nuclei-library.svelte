@@ -47,7 +47,7 @@
 		TemplateLibraryStats,
 		VulnTemplateRead
 	} from '$lib/types/vuln-template';
-	import { SEARCH_DEBOUNCE_MS } from '$lib/utilities/scan-status';
+	import { afterPause } from '$lib/utilities/debounce';
 
 	const PAGE_SIZE = 25;
 	const ALL = 'all';
@@ -131,8 +131,7 @@
 
 	$effect(() => {
 		void JSON.stringify(filter);
-		const handle = setTimeout(() => untrack(loadList), SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(handle);
+		return afterPause(loadList);
 	});
 
 	$effect(() => {
