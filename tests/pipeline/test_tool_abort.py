@@ -87,3 +87,32 @@ def test_a_grandchild_does_not_outlive_the_stop():
         _run(script, should_stop=lambda: True)
     time.sleep(5)
     assert not marker.exists()
+
+
+def _stream(script: str, **over):
+    """A streaming run through the public entry point."""
+    runner = CLIToolRunner("sh")
+    # json_flag is already in args, so nothing is appended to the command
+    options = {"args": ["-c", script], "json_flag": "-c", "silent": False}
+    options.update(over)
+    with runner.stream_json(**options) as outcome:
+        list(outcome.records)
+    return outcome
+
+
+def test_a_halted_scan_stops_a_streaming_tool():
+    started = time.monotonic()
+    with aborting_on(lambda: True):
+        outcome = _stream('echo "{}"; sleep 60')
+    assert outcome.stopped is True
+    assert outcome.ok is False, "a stopped stream is not a successful one"
+    assert outcome.timed_out is False, "halted is not timed out"
+    assert time.monotonic() - started < 20.0
+
+
+def test_a_streaming_tool_runs_to_the_end_while_the_scan_is_healthy():
+    with aborting_on(lambda: False):
+        outcome = _stream('echo "{\\"a\\": 1}"')
+    assert outcome.stopped is False
+    assert outcome.ok is True
+    assert outcome.record_count == 1

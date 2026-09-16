@@ -221,6 +221,9 @@ def run_stage(
 
         with aborting_on(ctx.is_aborted):
             result = engine.run()
+        # a stage whose tool was killed mid-stream returns normally; the row is the halt's
+        if _scan_is_halted(session_factory, scan.id):
+            raise StageAbortedError
     except StageAbortedError:
         _fail_stage(
             activity_svc,
