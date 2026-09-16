@@ -46,9 +46,6 @@ export const DASHBOARD_SLICE_LABELS: Record<DashboardSlice, string> = {
 	surfaceRisk: 'Surface against risk'
 };
 
-export const windowText = (w: DashboardWindow) =>
-	DASHBOARD_WINDOWS.find((x) => x.key === w)?.text ?? '';
-
 export interface TakeoverCandidate {
 	name: string;
 	target_id: string;

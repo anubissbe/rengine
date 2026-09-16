@@ -2,7 +2,7 @@ import Mail from '@lucide/svelte/icons/mail';
 import Send from '@lucide/svelte/icons/send';
 import ShieldCheck from '@lucide/svelte/icons/shield-check';
 import type { IconComponent } from './icons';
-import type { DomainPostureRead, DomainPostureSummary } from '$lib/types/domain-posture';
+import type { DomainPostureRead } from '$lib/types/domain-posture';
 import type { HygieneSummary } from '$lib/utilities/scan-insights';
 
 // mirrors shared/definitions/domain_posture.py
@@ -431,16 +431,6 @@ export interface PostureRow {
 	failing: number;
 	applicable: number;
 	query: string;
-}
-
-export function postureRows(summary: DomainPostureSummary | null): PostureRow[] {
-	const byKey = new Map((summary?.checks ?? []).map((c) => [c.key, c]));
-	return CHECKS.map((spec) => {
-		const c = byKey.get(spec.key);
-		return c
-			? { spec, failing: c.failing, applicable: c.applicable, query: c.query }
-			: { spec, failing: 0, applicable: 0, query: postureQuery(spec.key) };
-	}).filter((r) => r.failing > 0);
 }
 
 export function hostRows(summary: HygieneSummary | null): PostureRow[] {

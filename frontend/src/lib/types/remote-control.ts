@@ -131,14 +131,6 @@ export interface ChannelCommand {
 
 export type ChannelCall = McpCall;
 
-export interface AccountOption {
-	id: string;
-	username: string;
-	email: string;
-	is_active: boolean;
-	totp_enabled: boolean;
-}
-
 export function listenerState(status: ChannelStatus | null): ListenerState {
 	if (!status || !status.configured) return 'unconfigured';
 	if (!status.enabled) return 'stopped';

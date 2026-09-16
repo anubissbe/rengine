@@ -269,10 +269,6 @@ export const CHECK_ORDER: Record<string, number> = Object.fromEntries(
 	CHECKS.map((c, i) => [c.key, i])
 );
 
-export function checkSpec(key: string): CheckSpec | null {
-	return CHECK_BY_KEY[key] ?? null;
-}
-
 export function checkLabel(key: string): string {
 	if (key === HYGIENE_NONE) return 'Passes every check';
 	if (key === HYGIENE_ANY) return 'Any check failing';
