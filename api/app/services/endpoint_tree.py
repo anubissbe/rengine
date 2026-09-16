@@ -437,6 +437,8 @@ def _fold_layouts(parent: _Node, children: list[_Node]) -> list[_Node]:
     members = [c for c in pool if len(set(c.children) & core) >= _MIN_SHARED]
     if len(members) < _MIN_GROUP:
         return children
+    # the row's token names every folder it counts, so the group stops where the token does
+    members = sorted(members, key=_rank)[:_MAX_GROUP_TOKEN]
     group = _Node(
         key=f"{parent.key}#layout",
         name=f"{len(members)} folders share one layout",
@@ -447,7 +449,7 @@ def _fold_layouts(parent: _Node, children: list[_Node]) -> list[_Node]:
     )
     for m in members:
         group.merge(m)
-    group.members = sorted(members, key=_rank)
+    group.members = members
     group.shared = [name for name, _ in inner.most_common() if name in core][:_MAX_HINT]
     member_keys = {m.key for m in members}
     return [group, *[c for c in children if c.key not in member_keys]]
@@ -517,7 +519,7 @@ def _emit(node: _Node) -> TreeNode:
 
 def _emit_group(group: _Node) -> TreeNode:
     members = [_emit(m) for m in group.members]
-    paths = [m.path for m in group.members][:_MAX_GROUP_TOKEN]
+    paths = [m.path for m in group.members]
     return TreeNode(
         key=group.key,
         name=group.name,
