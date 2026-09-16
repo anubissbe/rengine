@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from shared.definitions.vulnerabilities import (
     MAX_EVIDENCE_BYTES,
@@ -122,13 +122,38 @@ def fingerprint(
     return hashlib.sha256(raw.encode("utf-8", "ignore")).hexdigest()
 
 
+def _split(value: str | None) -> SplitResult | None:
+    """The split URL, or None when it does not parse."""
+    if not value or "://" not in value:
+        return None
+    try:
+        return urlsplit(value)
+    except ValueError:
+        return None
+
+
+def _declared_port(parts: SplitResult) -> int | None:
+    """The URL's port or its scheme's default. None when the port does not read."""
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    if port:
+        return port
+    if parts.scheme == "https":
+        return 443
+    if parts.scheme == "http":
+        return 80
+    return None
+
+
 def _hostname(candidate: str | None) -> str | None:
     if not candidate:
         return None
     value = candidate.strip()
     if "://" in value:
-        parsed = urlsplit(value)
-        return parsed.hostname or None
+        parts = _split(value)
+        return (parts.hostname or None) if parts else None
     head = value.split("/", 1)[0]
     if head.count(":") == 1:
         head = head.split(":", 1)[0]
@@ -139,14 +164,9 @@ def _port_of(record: dict, url: str | None) -> int | None:
     direct = _as_int(record.get("port"))
     if direct:
         return direct
-    if url and "://" in url:
-        parsed = urlsplit(url)
-        if parsed.port:
-            return parsed.port
-        if parsed.scheme == "https":
-            return 443
-        if parsed.scheme == "http":
-            return 80
+    parts = _split(url)
+    if parts is not None and (port := _declared_port(parts)) is not None:
+        return port
     host = record.get("host") or ""
     if isinstance(host, str) and host.count(":") == 1:
         return _as_int(host.rsplit(":", 1)[1])

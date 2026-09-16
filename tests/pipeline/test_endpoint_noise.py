@@ -153,6 +153,23 @@ async def test_tracking_parameters_and_index_files_are_cleaned_not_dropped(estat
     assert rows["/a/b"].url == "https://www.example.com/a/b?id=1"
 
 
+async def test_a_malformed_port_is_rejected_not_raised(estate, now):
+    await estate.scan("example.com", "run", at=now)
+    result = await _upsert(
+        estate,
+        "run",
+        [
+            _seen("http://www.example.com:80'/admin"),
+            _seen("http://www.example.com:8o/admin"),
+            _seen("http://www.example.com:99999/admin"),
+            _seen("https://www.example.com/admin"),
+        ],
+    )
+    assert result.rejected == 3
+    assert result.created == 1
+    assert await _paths(estate, "run") == ["/admin"]
+
+
 async def test_family_cap_keeps_three_and_counts_the_rest(estate, now):
     await estate.scan("example.com", "run", at=now)
     urls = [

@@ -117,6 +117,7 @@ class Sifter:
             value = f"{default_scheme}://{value}"
         try:
             parts = urlsplit(value)
+            port = parts.port
         except ValueError:
             return url
         path = parts.path or "/"
@@ -135,7 +136,7 @@ class Sifter:
         host = (parts.hostname or "").lower()
         if (
             scheme == "http"
-            and parts.port in (None, _HTTP_PORT)
+            and port in (None, _HTTP_PORT)
             and host in self._https_only()
         ):
             scheme = "https"
