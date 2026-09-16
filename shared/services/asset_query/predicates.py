@@ -19,7 +19,7 @@ from sqlalchemy import (
     select,
     union_all,
 )
-from sqlalchemy.dialects.postgresql import BIT, JSONB
+from sqlalchemy.dialects.postgresql import BIT, INET, JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.orm import aliased
 
@@ -285,6 +285,14 @@ def live():
 
 def answered():
     return Subdomain.http_status.isnot(None)
+
+
+IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
+
+
+def inet_of(column):
+    """A stored address as INET; text that is not one reads as NULL, never an error."""
+    return cast(case((column.op("~")(IP_CHARS_RE), column), else_=None), INET)
 
 
 def auth():

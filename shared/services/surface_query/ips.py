@@ -11,7 +11,6 @@ from sqlalchemy import (
     String,
     and_,
     bindparam,
-    cast,
     column,
     exists,
     not_,
@@ -19,7 +18,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from shared.definitions.asset_query import IP_QUERY
@@ -29,6 +28,7 @@ from shared.services.asset_query import (
     IpQueryContext,
     QueryScope,
     compile_ip_query,
+    inet_of,
     parse_query,
 )
 
@@ -172,7 +172,7 @@ def apply_filter(q, d, f: IpGroupFilter, scope: QueryScope):
 
 
 def order(q, d, f: IpGroupFilter):
-    ip_num = cast(d.c.ip, INET)
+    ip_num = inet_of(d.c.ip)
     col = {
         "hosts": d.c.host_count,
         "ports": d.c.port_count,

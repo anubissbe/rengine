@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, case, cast, func, literal, or_
+from sqlalchemy import and_, cast, func, literal, or_
 from sqlalchemy.dialects.postgresql import INET, JSONB
 
 from shared.definitions.asset_query import SOFTWARE_FLAGS, SOFTWARE_QUERY, Op
@@ -35,7 +35,6 @@ class SoftwareQueryContext:
 
 LIKELY_EPSS = 0.088
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
-_IP_CHARS_RE = "^[0-9a-fA-F:.]+$"
 
 
 def _float_coerce(raw: str) -> float:
@@ -47,8 +46,7 @@ def _float_coerce(raw: str) -> float:
 
 
 def _inet():
-    column = SoftwareCve.ip
-    return cast(case((column.op("~")(_IP_CHARS_RE), column), else_=None), INET)
+    return preds.inet_of(SoftwareCve.ip)
 
 
 def _address(cmp: Compare, _ctx: SoftwareQueryContext):

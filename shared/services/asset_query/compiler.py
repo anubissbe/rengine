@@ -46,7 +46,6 @@ from .values import asn_number, like, network, render_hash, status_range, tsquer
 from .walk import as_compare, free_text_fields, walker
 
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
-_IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
 _HEADER_WEIGHT = "A"
 _BODY_WEIGHT = "B"
 
@@ -92,10 +91,7 @@ def _within(cidr: str):
     return exists(
         select(1)
         .select_from(element)
-        .where(
-            element.c.value.op("~")(_IP_CHARS_RE),
-            cast(element.c.value, INET).op("<<=")(cast(literal(cidr), INET)),
-        )
+        .where(preds.inet_of(element.c.value).op("<<=")(cast(literal(cidr), INET)))
     )
 
 

@@ -7,7 +7,6 @@ from datetime import datetime
 from sqlalchemy import (
     Text,
     and_,
-    case,
     cast,
     func,
     literal,
@@ -42,7 +41,6 @@ from .terms import (
 from .values import asn_number, like, network
 from .walk import walker
 
-_IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
 
 
@@ -53,8 +51,7 @@ class VulnQueryContext:
 
 
 def _inet():
-    column = Vulnerability.ip
-    return cast(case((column.op("~")(_IP_CHARS_RE), column), else_=None), INET)
+    return preds.inet_of(Vulnerability.ip)
 
 
 def _address(cmp: Compare, _ctx: VulnQueryContext):

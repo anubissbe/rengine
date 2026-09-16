@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import case, cast, exists, func, literal, or_, select
+from sqlalchemy import cast, exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import INET, JSONB
 
 from shared.definitions.asset_query import IP_FLAGS, IP_QUERY, Op
@@ -28,7 +28,6 @@ from .terms import (
 from .values import PRIVATE_NETWORKS, asn_number, like, network
 from .walk import walker
 
-_IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
 _IPV4 = 4
 _IPV6 = 6
@@ -42,8 +41,7 @@ class IpQueryContext:
 
 
 def _inet(ctx: IpQueryContext):
-    column = ctx.source.c.ip
-    return cast(case((column.op("~")(_IP_CHARS_RE), column), else_=None), INET)
+    return preds.inet_of(ctx.source.c.ip)
 
 
 def _within(ctx: IpQueryContext, cidr: str):
