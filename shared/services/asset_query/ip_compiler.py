@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, cast, exists, false, func, literal, or_, select, true
+from sqlalchemy import case, cast, exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import INET, JSONB
 
 from shared.definitions.asset_query import IP_FLAGS, IP_QUERY, Op
@@ -14,7 +14,7 @@ from shared.models.subdomain import Subdomain
 from shared.models.vulnerability import Vulnerability
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, QuerySyntaxError
 from .scope import QueryScope
 from .terms import (
     int_coerce,
@@ -26,6 +26,7 @@ from .terms import (
     tri_state,
 )
 from .values import PRIVATE_NETWORKS, asn_number, like, network
+from .walk import walker
 
 _IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
@@ -147,45 +148,4 @@ _IP_BUILDERS = {
 }
 
 
-def compile_ip_compare(cmp: Compare, ctx: IpQueryContext):
-    builder = _IP_BUILDERS.get(cmp.name)
-    if builder is None:
-        msg = f"Field {cmp.name!r} cannot be searched."
-        raise QuerySyntaxError(msg, cmp.start, cmp.end)
-    return builder(cmp, ctx)
-
-
-def compile_ip_term(term: Term, ctx: IpQueryContext):
-    branches = []
-    for spec in IP_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        branches.append(_IP_BUILDERS[spec.name](cmp, ctx))
-    return or_(*branches) if branches else false()
-
-
-def compile_ip_node(node: Node, ctx: IpQueryContext):
-    if isinstance(node, Term):
-        return compile_ip_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_ip_compare(node, ctx)
-    if isinstance(node, Not):
-        return negate(compile_ip_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_ip_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return or_(*[compile_ip_node(p, ctx) for p in node.parts])
-    return true()
-
-
-def compile_ip_query(node: Node | None, ctx: IpQueryContext):
-    return None if node is None else compile_ip_node(node, ctx)
+compile_ip_query = walker(IP_QUERY, _IP_BUILDERS)

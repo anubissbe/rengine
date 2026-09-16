@@ -3,16 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, false, or_, true
+from sqlalchemy import or_
 
-from shared.definitions.asset_query import SECRET_FLAGS, SECRET_QUERY, Op
+from shared.definitions.asset_query import SECRET_FLAGS, SECRET_QUERY
 from shared.definitions.secrets import SecretState
 from shared.models.secret import Secret
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, QuerySyntaxError
 from .scope import QueryScope
-from .terms import date_match, negate, string_match, target_match
+from .terms import date_match, string_match, target_match
+from .walk import walker
 
 
 @dataclass(frozen=True)
@@ -59,45 +60,4 @@ _BUILDERS = {
 }
 
 
-def compile_secret_compare(cmp: Compare, ctx: SecretQueryContext):
-    builder = _BUILDERS.get(cmp.name)
-    if builder is None:
-        msg = f"Field {cmp.name!r} cannot be searched."
-        raise QuerySyntaxError(msg, cmp.start, cmp.end)
-    return builder(cmp, ctx)
-
-
-def compile_secret_term(term: Term, ctx: SecretQueryContext):
-    branches = []
-    for spec in SECRET_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        branches.append(_BUILDERS[spec.name](cmp, ctx))
-    return or_(*branches) if branches else false()
-
-
-def compile_secret_node(node: Node, ctx: SecretQueryContext):
-    if isinstance(node, Term):
-        return compile_secret_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_secret_compare(node, ctx)
-    if isinstance(node, Not):
-        return negate(compile_secret_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_secret_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return or_(*[compile_secret_node(p, ctx) for p in node.parts])
-    return true()
-
-
-def compile_secret_query(node: Node | None, ctx: SecretQueryContext):
-    return None if node is None else compile_secret_node(node, ctx)
+compile_secret_query = walker(SECRET_QUERY, _BUILDERS)

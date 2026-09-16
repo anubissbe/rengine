@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, case, cast, false, func, literal, or_, true
+from sqlalchemy import and_, case, cast, func, literal, or_
 from sqlalchemy.dialects.postgresql import INET, JSONB
 
 from shared.definitions.asset_query import SOFTWARE_FLAGS, SOFTWARE_QUERY, Op
@@ -13,7 +13,7 @@ from shared.definitions.software import Caveat, Confidence, VersionSource
 from shared.models.software import SoftwareCve
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, QuerySyntaxError
 from .scope import QueryScope
 from .terms import (
     date_match,
@@ -24,6 +24,7 @@ from .terms import (
     target_match,
 )
 from .values import like, network
+from .walk import walker
 
 
 @dataclass(frozen=True)
@@ -140,45 +141,4 @@ _BUILDERS = {
 }
 
 
-def compile_software_compare(cmp: Compare, ctx: SoftwareQueryContext):
-    builder = _BUILDERS.get(cmp.name)
-    if builder is None:
-        msg = f"Field {cmp.name!r} cannot be searched."
-        raise QuerySyntaxError(msg, cmp.start, cmp.end)
-    return builder(cmp, ctx)
-
-
-def compile_software_term(term: Term, ctx: SoftwareQueryContext):
-    branches = []
-    for spec in SOFTWARE_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        branches.append(_BUILDERS[spec.name](cmp, ctx))
-    return or_(*branches) if branches else false()
-
-
-def compile_software_node(node: Node, ctx: SoftwareQueryContext):
-    if isinstance(node, Term):
-        return compile_software_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_software_compare(node, ctx)
-    if isinstance(node, Not):
-        return negate(compile_software_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_software_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return or_(*[compile_software_node(p, ctx) for p in node.parts])
-    return true()
-
-
-def compile_software_query(node: Node | None, ctx: SoftwareQueryContext):
-    return None if node is None else compile_software_node(node, ctx)
+compile_software_query = walker(SOFTWARE_QUERY, _BUILDERS)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from sqlalchemy import and_, cast, false, func, or_, select, true, union_all
+from sqlalchemy import and_, cast, false, func, or_, select, union_all
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 
@@ -18,7 +18,7 @@ from shared.models.endpoint import Endpoint
 from shared.models.vulnerability import Vulnerability
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, QuerySyntaxError, Term
 from .scope import QueryScope
 from .terms import (
     date_match,
@@ -30,6 +30,7 @@ from .terms import (
     string_match,
     target_match,
 )
+from .walk import as_compare, compare_with, free_text_fields, walker
 
 _SENSITIVE_INTEREST = (
     PathInterest.VCS.value,
@@ -170,32 +171,15 @@ _ENDPOINT_BUILDERS = {
 }
 
 
-def compile_endpoint_compare(cmp: Compare, ctx: EndpointQueryContext):
-    builder = _ENDPOINT_BUILDERS.get(cmp.name)
-    if builder is None:
-        msg = f"Field {cmp.name!r} cannot be searched."
-        raise QuerySyntaxError(msg, cmp.start, cmp.end)
-    return builder(cmp, ctx)
-
-
-def compile_endpoint_term(term: Term, ctx: EndpointQueryContext):
-    reach = ctx.scope.match(Endpoint.scan_id)
-    branches = []
-    for spec in ENDPOINT_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        branches.append(_ENDPOINT_BUILDERS[spec.name](cmp, ctx))
+def _free_text(term: Term, ctx: EndpointQueryContext):
+    """One id lookup per free-text field."""
+    branches = [
+        compare_with(_ENDPOINT_BUILDERS, as_compare(term, field), ctx)
+        for field in free_text_fields(ENDPOINT_QUERY)
+    ]
     if not branches:
         return false()
+    reach = ctx.scope.match(Endpoint.scan_id)
     reachable = union_all(
         *[
             select(Endpoint.id).where(reach, branch).correlate(None)
@@ -205,19 +189,4 @@ def compile_endpoint_term(term: Term, ctx: EndpointQueryContext):
     return Endpoint.id.in_(select(reachable.c.id))
 
 
-def compile_endpoint_node(node: Node, ctx: EndpointQueryContext):
-    if isinstance(node, Term):
-        return compile_endpoint_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_endpoint_compare(node, ctx)
-    if isinstance(node, Not):
-        return negate(compile_endpoint_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_endpoint_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return or_(*[compile_endpoint_node(p, ctx) for p in node.parts])
-    return true()
-
-
-def compile_endpoint_query(node: Node | None, ctx: EndpointQueryContext):
-    return None if node is None else compile_endpoint_node(node, ctx)
+compile_endpoint_query = walker(ENDPOINT_QUERY, _ENDPOINT_BUILDERS, term=_free_text)

@@ -29,7 +29,7 @@ from shared.models.subdomain import Subdomain
 from shared.models.vulnerability import Vulnerability
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, Or, QuerySyntaxError, Term
 from .scope import QueryScope
 from .terms import (
     date_match,
@@ -43,6 +43,7 @@ from .terms import (
     tri_state,
 )
 from .values import asn_number, like, network, render_hash, status_range, tsquery
+from .walk import as_compare, free_text_fields, walker
 
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
 _IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
@@ -369,32 +370,23 @@ def compile_compare(cmp: Compare, ctx: QueryContext) -> Compiled:
 
 
 def compile_term(term: Term, ctx: QueryContext):
-    reach = ctx.scope.match(Subdomain.scan_id)
+    """One id lookup per free-text field."""
     branches = []
     assets = []
-    for spec in HOST_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        override = _FREE_TEXT_BUILDERS.get(spec.name)
+    for field in free_text_fields(HOST_QUERY):
+        cmp = as_compare(term, field)
+        override = _FREE_TEXT_BUILDERS.get(field)
         if override is not None:
             branches.append(override(cmp, ctx))
-        elif spec.name in _ASSET_BUILDERS:
-            assets.append(_ASSET_BUILDERS[spec.name](cmp, ctx))
+        elif field in _ASSET_BUILDERS:
+            assets.append(_ASSET_BUILDERS[field](cmp, ctx))
         else:
-            branches.append(_SUBDOMAIN_BUILDERS[spec.name](cmp, ctx))
+            branches.append(_SUBDOMAIN_BUILDERS[field](cmp, ctx))
     if assets:
         branches.append(preds.asset_match(ctx.scope, or_(*assets)))
     if not branches:
         return false()
+    reach = ctx.scope.match(Subdomain.scan_id)
     reachable = union_all(
         *[
             select(Subdomain.id).where(reach, branch).correlate(None)
@@ -404,21 +396,7 @@ def compile_term(term: Term, ctx: QueryContext):
     return Subdomain.id.in_(select(reachable.c.id))
 
 
-def compile_node(node: Node, ctx: QueryContext):
-    if isinstance(node, Term):
-        return compile_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_compare(node, ctx).flatten(ctx)
-    if isinstance(node, Not):
-        return negate(compile_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return _compile_or(node, ctx)
-    return true()
-
-
-def _compile_or(node: Or, ctx: QueryContext):
+def _compile_or(node: Or, ctx: QueryContext, walk):
     """Fold sibling asset predicates into one semijoin."""
     parts, assets = [], []
     for part in node.parts:
@@ -429,11 +407,16 @@ def _compile_or(node: Or, ctx: QueryContext):
                 continue
             parts.append(compiled.flatten(ctx))
         else:
-            parts.append(compile_node(part, ctx))
+            parts.append(walk(part, ctx))
     if assets:
         parts.append(preds.asset_match(ctx.scope, or_(*assets)))
     return or_(*parts) if parts else true()
 
 
-def compile_query(node: Node | None, ctx: QueryContext):
-    return None if node is None else compile_node(node, ctx)
+compile_query = walker(
+    HOST_QUERY,
+    _SUBDOMAIN_BUILDERS,
+    term=compile_term,
+    compare=lambda cmp, ctx: compile_compare(cmp, ctx).flatten(ctx),
+    fold_or=_compile_or,
+)

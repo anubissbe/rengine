@@ -9,13 +9,10 @@ from sqlalchemy import (
     and_,
     case,
     cast,
-    false,
     func,
     literal,
     or_,
     select,
-    true,
-    union_all,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
 
@@ -31,7 +28,7 @@ from shared.models.ip_address import IpAddress
 from shared.models.vulnerability import Vulnerability
 
 from . import predicates as preds
-from .ast import And, Compare, Node, Not, Or, QuerySyntaxError, Term
+from .ast import Compare, QuerySyntaxError
 from .scope import QueryScope
 from .terms import (
     date_match,
@@ -43,6 +40,7 @@ from .terms import (
     target_match,
 )
 from .values import asn_number, like, network
+from .walk import walker
 
 _IP_CHARS_RE = r"^[0-9a-fA-F:.]+$"
 _IPV4_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
@@ -205,54 +203,4 @@ _VULN_BUILDERS = {
 }
 
 
-def compile_vuln_compare(cmp: Compare, ctx: VulnQueryContext):
-    builder = _VULN_BUILDERS.get(cmp.name)
-    if builder is None:
-        msg = f"Field {cmp.name!r} cannot be searched."
-        raise QuerySyntaxError(msg, cmp.start, cmp.end)
-    return builder(cmp, ctx)
-
-
-def compile_vuln_term(term: Term, ctx: VulnQueryContext):
-    reach = ctx.scope.match(Vulnerability.scan_id)
-    branches = []
-    for spec in VULN_QUERY.fields:
-        if not spec.free_text:
-            continue
-        cmp = Compare(
-            name=spec.name,
-            op=Op.MATCH,
-            values=(term.value,),
-            quoted=term.quoted,
-            sub=None,
-            start=term.start,
-            end=term.end,
-        )
-        branches.append(_VULN_BUILDERS[spec.name](cmp, ctx))
-    if not branches:
-        return false()
-    reachable = union_all(
-        *[
-            select(Vulnerability.id).where(reach, branch).correlate(None)
-            for branch in branches
-        ]
-    ).subquery()
-    return Vulnerability.id.in_(select(reachable.c.id))
-
-
-def compile_vuln_node(node: Node, ctx: VulnQueryContext):
-    if isinstance(node, Term):
-        return compile_vuln_term(node, ctx)
-    if isinstance(node, Compare):
-        return compile_vuln_compare(node, ctx)
-    if isinstance(node, Not):
-        return negate(compile_vuln_node(node.part, ctx))
-    if isinstance(node, And):
-        return and_(*[compile_vuln_node(p, ctx) for p in node.parts])
-    if isinstance(node, Or):
-        return or_(*[compile_vuln_node(p, ctx) for p in node.parts])
-    return true()
-
-
-def compile_vuln_query(node: Node | None, ctx: VulnQueryContext):
-    return None if node is None else compile_vuln_node(node, ctx)
+compile_vuln_query = walker(VULN_QUERY, _VULN_BUILDERS)
