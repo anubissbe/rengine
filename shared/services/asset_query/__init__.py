@@ -1,7 +1,13 @@
 from .ast import Node, QuerySyntaxError
 from .compiler import QueryContext, compile_query
 from .endpoint_compiler import EndpointQueryContext, compile_endpoint_query
-from .errors import NO_JIT, QUERY_SQLSTATES, STATEMENT_TIMEOUT, query_error_for
+from .errors import (
+    NO_JIT,
+    QUERY_SQLSTATES,
+    STATEMENT_TIMEOUT,
+    query_error_for,
+    syntax_error,
+)
 from .evidence import collect as collect_evidence
 from .groups import (
     build_endpoint_groups,
@@ -88,6 +94,7 @@ __all__ = [
     "service_is_new",
     "software_has_baseline",
     "software_is_new",
+    "syntax_error",
     "vuln_corroborated",
     "vuln_corroborated_ids",
     "vuln_evidence",

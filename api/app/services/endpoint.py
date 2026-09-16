@@ -39,6 +39,7 @@ from app.services.asset_query import (
     endpoint_status_class,
     parse_query,
     query_error_for,
+    syntax_error,
     vuln_suppressed,
 )
 from app.services.endpoint_tree import (
@@ -72,7 +73,7 @@ from shared.definitions.endpoints import (
     param_interest,
 )
 from shared.logging import get_logger
-from shared.models.asset_query import QueryError, QueryGroups, QueryLeads
+from shared.models.asset_query import QueryGroups, QueryLeads
 from shared.models.endpoint import (
     CoverageRead,
     Endpoint,
@@ -285,11 +286,7 @@ class EndpointService:
         try:
             predicate = self._compiled(scope, f, now)
         except QuerySyntaxError as exc:
-            return EndpointPage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return EndpointPage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 
@@ -562,9 +559,7 @@ class EndpointService:
         except QuerySyntaxError as exc:
             return EndpointTree(
                 mode=mode,
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                ),
+                error=syntax_error(exc),
             )
         if predicate is not None:
             base = base.where(predicate)
@@ -638,11 +633,7 @@ class EndpointService:
         try:
             predicate = self._compiled(scope, f, now)
         except QuerySyntaxError as exc:
-            return HostPage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return HostPage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
         reach = _Reach(scope, base, f.has_facets() or predicate is not None)
@@ -1186,11 +1177,7 @@ class EndpointService:
         try:
             predicate = self._compiled(previous, f, now)
         except QuerySyntaxError as exc:
-            return GonePage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return GonePage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
         await self.session.execute(text(STATEMENT_TIMEOUT))

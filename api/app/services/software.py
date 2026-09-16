@@ -18,6 +18,7 @@ from app.services.asset_query import (
     parse_query,
     query_error_for,
     software_has_baseline,
+    syntax_error,
 )
 from app.services.target_names import target_names
 from shared.definitions.asset_query import COUNT_CAP, SOFTWARE_QUERY
@@ -34,7 +35,6 @@ from shared.definitions.software import (
 from shared.definitions.threat_intel import STALE_AFTER_HOURS, FeedKind, exploit_band
 from shared.definitions.vulnerabilities import SEVERITY_LABELS, SEVERITY_ORDER
 from shared.logging import get_logger
-from shared.models.asset_query import QueryError
 from shared.models.software import (
     NvdCve,
     SoftwareComponentRead,
@@ -80,11 +80,7 @@ class SoftwareService:
                 parse_query(f.q, SOFTWARE_QUERY), self._context(scope, now)
             )
         except QuerySyntaxError as exc:
-            return SoftwarePage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return SoftwarePage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 

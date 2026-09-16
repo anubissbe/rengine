@@ -20,6 +20,7 @@ from app.services.asset_query import (
     parse_query,
     query_error_for,
     secret_has_baseline,
+    syntax_error,
 )
 from app.services.target_names import target_names
 from shared.definitions.asset_query import COUNT_CAP, SECRET_QUERY
@@ -35,7 +36,7 @@ from shared.definitions.secrets import (
 )
 from shared.definitions.vulnerabilities import CoverageStatus
 from shared.logging import get_logger
-from shared.models.asset_query import QueryError, QueryGroups
+from shared.models.asset_query import QueryGroups
 from shared.models.secret import (
     Secret,
     SecretCoverage,
@@ -81,11 +82,7 @@ class SecretService:
                 parse_query(f.q, SECRET_QUERY), self._context(scope, now)
             )
         except QuerySyntaxError as exc:
-            return SecretPage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return SecretPage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 

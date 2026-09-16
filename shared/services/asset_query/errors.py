@@ -4,6 +4,8 @@ from sqlalchemy.exc import DBAPIError
 
 from shared.models.asset_query import QueryError
 
+from .ast import QuerySyntaxError
+
 STATEMENT_TIMEOUT = "SET LOCAL statement_timeout = '20s'"
 NO_JIT = "SET LOCAL jit = off"
 
@@ -27,3 +29,8 @@ def query_error_for(exc: DBAPIError) -> QueryError | None:
         return None
     message, hint = known
     return QueryError(message=message, hint=hint)
+
+
+def syntax_error(exc: QuerySyntaxError) -> QueryError:
+    """What the UI underlines in place of the query it could not parse."""
+    return QueryError(message=exc.message, hint=exc.hint, start=exc.start, end=exc.end)

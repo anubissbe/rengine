@@ -21,6 +21,7 @@ from app.services.asset_query import (
     compile_service_query,
     parse_query,
     query_error_for,
+    syntax_error,
 )
 from app.services.surface_scope import baselined_targets
 from app.services.target_names import target_names
@@ -36,7 +37,7 @@ from shared.definitions.ports import (
     service_label,
 )
 from shared.logging import get_logger
-from shared.models.asset_query import QueryError, QueryGroups, QueryLeads
+from shared.models.asset_query import QueryGroups, QueryLeads
 from shared.models.port import Port, PortRead, PortSummary
 from shared.models.scan_correlation import (
     ExposureBand,
@@ -197,11 +198,7 @@ class PortService:
                 parse_query(f.q, SERVICE_QUERY), self._context(scope, d, now)
             )
         except QuerySyntaxError as exc:
-            return ServicePage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return ServicePage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 

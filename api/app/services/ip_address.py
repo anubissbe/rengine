@@ -22,13 +22,14 @@ from app.services.asset_query import (
     compile_ip_query,
     parse_query,
     query_error_for,
+    syntax_error,
 )
 from app.services.port import PortService
 from app.services.target_names import target_names
 from shared.definitions.asset_query import COUNT_CAP, IP_EXPOSURE, IP_QUERY
 from shared.definitions.ports import port_interest
 from shared.logging import get_logger
-from shared.models.asset_query import QueryError, QueryGroups, QueryLeads
+from shared.models.asset_query import QueryGroups, QueryLeads
 from shared.models.http_asset import HttpAsset
 from shared.models.ip_address import IpAddress, IpAddressRead, IpAddressSummary
 from shared.models.port import Port
@@ -203,11 +204,7 @@ class IpAddressService:
                 parse_query(f.q, IP_QUERY), self._context(scope, d, now)
             )
         except QuerySyntaxError as exc:
-            return IpGroupPage(
-                error=QueryError(
-                    message=exc.message, hint=exc.hint, start=exc.start, end=exc.end
-                )
-            )
+            return IpGroupPage(error=syntax_error(exc))
         if predicate is not None:
             base = base.where(predicate)
 
