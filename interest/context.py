@@ -62,7 +62,7 @@ class InterestContext:
         )
 
     @cached_property
-    def live_hosts(self) -> list[HostRow]:
+    def answered_hosts(self) -> list[HostRow]:
         rows = (
             self.session.execute(
                 select(
@@ -93,7 +93,7 @@ class InterestContext:
         """Bulk parked pages are one answer, not five hundred."""
         seen: dict[tuple, int] = {}
         kept: list[HostRow] = []
-        for row in self.live_hosts:
+        for row in self.answered_hosts:
             shape = row.shape
             count = seen.get(shape, 0)
             seen[shape] = count + 1

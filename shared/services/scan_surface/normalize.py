@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from shared.utils.net import bracketed, host_port
-
-DEFAULT_PORTS: dict[str, int] = {"http": 80, "https": 443}
+from shared.definitions.ports import SCHEME_PORTS as DEFAULT_PORTS
+from shared.utils.net import bracketed, host_port, url_port
 
 
 @dataclass(frozen=True)
@@ -45,11 +44,7 @@ def parse_root(
     if not host:
         return None
     scheme_value = (parsed.scheme or scheme or "https").lower()
-    try:
-        port_value = parsed.port
-    except ValueError:
-        port_value = None
-    port_value = port_value or port or DEFAULT_PORTS.get(scheme_value)
+    port_value = url_port(parsed) or port or DEFAULT_PORTS.get(scheme_value)
     if not port_value:
         return None
     return Root(scheme=scheme_value, host=host, port=int(port_value))

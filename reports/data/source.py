@@ -545,7 +545,7 @@ class ReportSource:
         return out
 
     @cached_property
-    def live_hosts(self) -> list[Host]:
+    def answered_hosts(self) -> list[Host]:
         return [h for h in self.host_rows if h.status]
 
     # ---------- addresses ----------

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from urllib.parse import parse_qsl, urlsplit
 
+from shared.definitions.ports import SCHEME_PORTS
 from shared.utils.net import bracketed
 
 MAX_URL_LENGTH = 2000
@@ -735,7 +736,6 @@ ROOT_NOISE_FILES: frozenset[str] = frozenset(
 )
 ROOT_NOISE_DIRS: tuple[str, ...] = ("/.well-known/",)
 
-_DEFAULT_PORTS: dict[str, int] = {"http": 80, "https": 443}
 _EXT_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
 _HOST_RE = re.compile(r"^[a-z0-9._\-]+$|^[0-9a-f:.]+$")
 
@@ -815,13 +815,13 @@ def parse_url(raw: str, *, default_scheme: str = "https") -> ParsedUrl | None:
     except ValueError:
         return None
     scheme = (parts.scheme or default_scheme).lower()
-    if scheme not in _DEFAULT_PORTS:
+    if scheme not in SCHEME_PORTS:
         return None
     host = (parts.hostname or "").lower().strip(".")
     if not host or len(host) > MAX_HOST_LENGTH or not _HOST_RE.match(host):
         return None
     try:
-        port = parts.port or _DEFAULT_PORTS[scheme]
+        port = parts.port or SCHEME_PORTS[scheme]
     except ValueError:
         return None
     path = normalize_path(parts.path)
@@ -836,7 +836,7 @@ def parse_url(raw: str, *, default_scheme: str = "https") -> ParsedUrl | None:
     params = tuple(sorted(values))
 
     literal = bracketed(host)
-    authority = literal if port == _DEFAULT_PORTS[scheme] else f"{literal}:{port}"
+    authority = literal if port == SCHEME_PORTS[scheme] else f"{literal}:{port}"
     query = "&".join(f"{n}={values[n]}" for n in params)
     url = f"{scheme}://{authority}{path}" + (f"?{query}" if query else "")
     return ParsedUrl(

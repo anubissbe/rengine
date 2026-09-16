@@ -43,7 +43,7 @@ class WebAssetsSection(Section):
     config_model = WebAssetsConfig
 
     def build(self, ctx: RenderContext, cfg: WebAssetsConfig) -> dict | None:
-        rows = ctx.data.live_hosts if cfg.only_live else ctx.data.host_rows
+        rows = ctx.data.answered_hosts if cfg.only_live else ctx.data.host_rows
         if not rows:
             return None
         if cfg.order == "findings":

@@ -7,7 +7,7 @@ import socket
 import ssl
 from urllib.parse import SplitResult, unquote, urlsplit
 
-from shared.utils.net import host_port
+from shared.utils.net import host_port, unreadable_port, url_port
 
 SOCKS_SCHEMES = frozenset({"socks5", "socks5h"})
 HTTP_SCHEMES = frozenset({"http", "https"})
@@ -53,6 +53,10 @@ def open_tunnel(proxy_url: str, host: str, port: int, timeout: float) -> socket.
     if not parts.hostname:
         msg = f"unusable proxy {proxy_url!r}"
         raise ProxyError(msg)
+    declared = unreadable_port(parts)
+    if declared:
+        msg = f"proxy port {declared!r} is not a port number"
+        raise ProxyError(msg)
     if scheme in SOCKS_SCHEMES:
         return _socks5_connect(parts, host, port, timeout)
     if scheme in HTTP_SCHEMES:
@@ -63,7 +67,7 @@ def open_tunnel(proxy_url: str, host: str, port: int, timeout: float) -> socket.
 
 def _dial(parts: SplitResult, scheme: str, timeout: float) -> socket.socket:
     return socket.create_connection(
-        (parts.hostname, parts.port or _DEFAULT_PORT[scheme]), timeout=timeout
+        (parts.hostname, url_port(parts) or _DEFAULT_PORT[scheme]), timeout=timeout
     )
 
 

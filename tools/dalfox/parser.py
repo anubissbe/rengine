@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
+from shared.definitions.ports import SCHEME_PORTS
 from shared.definitions.vulnerabilities import Protocol, Scanner, Severity
+from shared.utils.net import url_port
 from shared.utils.text import strip_control
 from tools.nuclei.parser import Finding, fingerprint
 
@@ -70,10 +72,7 @@ def parse_finding(record: dict) -> Finding | None:
         parsed = urlsplit(url)
         scheme = parsed.scheme
         host = parsed.hostname
-        try:
-            port = parsed.port or (443 if scheme == "https" else 80)
-        except ValueError:
-            port = None
+        port = url_port(parsed) or SCHEME_PORTS.get((scheme or "").lower())
 
     name = (
         _text(record.get("type_description"), 500)

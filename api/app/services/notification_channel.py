@@ -25,7 +25,7 @@ from shared.services.api_key.async_api_key import APIKeyService
 from shared.services.notifier import send_one, with_shared_bot
 from shared.services.scan_resolve import MASK
 from shared.utils.datetime import utc_now
-from shared.utils.net import validate_public_https_url
+from shared.utils.net import host_port, url_port, validate_public_https_url
 
 _TOKEN_TAIL = 4
 
@@ -94,8 +94,9 @@ def _mask_url(url: str) -> str:
     if scheme.lower() not in _HTTP_SCHEMES:
         return f"{scheme}://{MASK}"
     host = parts.hostname or url[:24]
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    port = url_port(parts)
+    if port:
+        host = host_port(host, port)
     return f"{scheme}://{host}/{MASK}"
 
 

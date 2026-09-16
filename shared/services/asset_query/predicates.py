@@ -283,6 +283,10 @@ def live():
     return and_(Subdomain.http_status >= HTTP_OK, Subdomain.http_status < HTTP_CLIENT)
 
 
+def answered():
+    return Subdomain.http_status.isnot(None)
+
+
 def auth():
     return or_(
         Subdomain.http_status.in_(AUTH_STATUS),

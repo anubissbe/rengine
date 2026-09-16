@@ -14,7 +14,7 @@ from shared.definitions.ports import (
 )
 from shared.logging import get_logger
 from shared.services.proxy_resolve import is_socks5, proxy_env
-from shared.utils.net import bracketed, host_port
+from shared.utils.net import bracketed, host_port, unreadable_port, url_port
 from tools.runner import (
     CLIToolRunner,
     OutputFormat,
@@ -48,11 +48,14 @@ def proxy_args(proxy_url: str | None) -> tuple[list[str], str | None]:
         )
     if not parts.hostname:
         return [], "The scan's proxy names no host. The port scan did not use it."
-    address = (
-        host_port(parts.hostname, parts.port)
-        if parts.port
-        else bracketed(parts.hostname)
-    )
+    declared = unreadable_port(parts)
+    if declared:
+        return [], (
+            f"The scan's proxy carries {declared!r} as its port. "
+            "The port scan did not use it."
+        )
+    port = url_port(parts)
+    address = host_port(parts.hostname, port) if port else bracketed(parts.hostname)
     args = ["-proxy", address]
     if parts.username:
         user = unquote(parts.username)

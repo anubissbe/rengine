@@ -11,6 +11,9 @@ from pathlib import Path
 MAX_PORT = 65535
 DEFAULT_WEB_PORTS: tuple[int, ...] = (80, 443)
 
+# the port a scheme implies when a URL does not carry one
+SCHEME_PORTS: dict[str, int] = {"http": 80, "https": 443}
+
 
 class ServiceClass(StrEnum):
     WEB = "web"

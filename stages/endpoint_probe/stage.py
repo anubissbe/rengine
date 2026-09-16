@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from shared.definitions.endpoints import PROBE_COVERAGE_SOURCE, STATIC_CLASSES
 from shared.definitions.intensity import TransportTool
+from shared.definitions.ports import SCHEME_PORTS
 from shared.definitions.surface import SurfaceDimension
 from shared.definitions.vulnerabilities import CoverageStatus
 from shared.enums.scan import AssetKind, Phase, StageGroup, StageRole
@@ -31,7 +32,6 @@ from tools.httpx.parser import parse_httpx_record
 logger = get_logger(__name__)
 
 _WRITE_BATCH = 500
-_DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 def _in_scheme(urls: list[str], scheme: str | None) -> tuple[list[str], int]:
@@ -263,7 +263,7 @@ class EndpointProbeStage(Stage):
             scheme = parts.scheme.lower()
             host = (parts.hostname or "").lower()
             if host:
-                wanted.add((scheme, host, port or _DEFAULT_PORTS.get(scheme, 0)))
+                wanted.add((scheme, host, port or SCHEME_PORTS.get(scheme, 0)))
         if not wanted:
             return {}
         rows = self.session.execute(
@@ -276,7 +276,7 @@ class EndpointProbeStage(Stage):
         ).all()
         out: dict[str, uuid.UUID] = {}
         for asset_id, scheme, host, port in rows:
-            key = (scheme, host.lower(), int(port or _DEFAULT_PORTS.get(scheme, 0)))
+            key = (scheme, host.lower(), int(port or SCHEME_PORTS.get(scheme, 0)))
             if key not in wanted:
                 continue
             for url in endpoint_judge.canary_urls(endpoint_judge.root_of(*key)):

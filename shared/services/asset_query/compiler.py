@@ -176,7 +176,7 @@ def _flag(cmp: Compare, ctx: QueryContext):
 
 _FLAG_BUILDERS = {
     "live": lambda _ctx: preds.live(),
-    "web": lambda _ctx: Subdomain.http_status.isnot(None),
+    "web": lambda _ctx: preds.answered(),
     "new": lambda ctx: preds.is_new(ctx.scope),
     "resolved": lambda _ctx: preds.resolved(),
     "auth": lambda _ctx: preds.auth(),

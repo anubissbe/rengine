@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import SplitResult, urlsplit
 
+from shared.definitions.ports import SCHEME_PORTS
 from shared.definitions.vulnerabilities import (
     MAX_EVIDENCE_BYTES,
     Protocol,
@@ -16,6 +17,7 @@ from shared.definitions.vulnerabilities import (
     coerce_severity,
     is_kev,
 )
+from shared.utils.net import url_port
 from shared.utils.text import strip_control
 
 _PROTOCOL_ALIASES = {
@@ -134,17 +136,7 @@ def _split(value: str | None) -> SplitResult | None:
 
 def _declared_port(parts: SplitResult) -> int | None:
     """The URL's port or its scheme's default. None when the port does not read."""
-    try:
-        port = parts.port
-    except ValueError:
-        return None
-    if port:
-        return port
-    if parts.scheme == "https":
-        return 443
-    if parts.scheme == "http":
-        return 80
-    return None
+    return url_port(parts) or SCHEME_PORTS.get((parts.scheme or "").lower())
 
 
 def _hostname(candidate: str | None) -> str | None:

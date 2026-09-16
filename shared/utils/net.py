@@ -1,7 +1,7 @@
 import ipaddress
 import socket
 from collections.abc import Iterable
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 
 def is_registry_routable(value: str) -> bool:
@@ -17,6 +17,10 @@ def validate_public_https_url(raw: str, *, label: str = "URL") -> None:
     parts = urlsplit(raw)
     if parts.scheme != "https" or not parts.hostname:
         msg = f"{label} must be an https:// URL."
+        raise ValueError(msg)
+    declared = unreadable_port(parts)
+    if declared:
+        msg = f"{label} carries {declared!r}, which is not a port number."
         raise ValueError(msg)
     try:
         infos = socket.getaddrinfo(parts.hostname, None)
@@ -57,6 +61,20 @@ def cert_covers(
         ):
             return True
     return False
+
+
+def url_port(parts: SplitResult) -> int | None:
+    """A URL's port, or None when absent or unreadable: reading .port is what raises."""
+    try:
+        return parts.port
+    except ValueError:
+        return None
+
+
+def unreadable_port(parts: SplitResult) -> str | None:
+    """The authority's port text when it is not a port number, else None."""
+    _, declared = split_host_port(parts.netloc.rsplit("@", 1)[-1])
+    return declared if declared and url_port(parts) is None else None
 
 
 def bracketed(host: str) -> str:

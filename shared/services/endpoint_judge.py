@@ -23,6 +23,7 @@ from shared.definitions.endpoints import (
     EndpointSource,
     NoiseRule,
 )
+from shared.definitions.ports import SCHEME_PORTS
 from shared.logging import get_logger
 from shared.models.endpoint import Endpoint
 from shared.models.http_asset import HttpAsset
@@ -43,7 +44,6 @@ _ERROR = range(500, 600)
 _PROTECTED_SOURCES = frozenset(
     {EndpointSource.PROXY.value, EndpointSource.IMPORT.value}
 )
-_DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 # ---------- fingerprints ----------
@@ -110,7 +110,7 @@ def canary_urls(root: str) -> list[str]:
 
 def root_of(scheme: str, host: str, port: int) -> str:
     literal = bracketed(host)
-    if port and port != _DEFAULT_PORTS.get(scheme):
+    if port and port != SCHEME_PORTS.get(scheme):
         return f"{scheme}://{literal}:{port}"
     return f"{scheme}://{literal}"
 
@@ -378,7 +378,7 @@ def _fingerprints(
     ).all()
     out: dict[tuple[str, str, int], list[Fingerprint]] = {}
     for scheme, host, port, stored in rows:
-        key = (scheme, host.lower(), int(port or _DEFAULT_PORTS.get(scheme, 0)))
+        key = (scheme, host.lower(), int(port or SCHEME_PORTS.get(scheme, 0)))
         usable = [
             Fingerprint.from_json(v) for v in (stored or []) if isinstance(v, dict)
         ]
