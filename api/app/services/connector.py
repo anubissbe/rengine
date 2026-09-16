@@ -1078,7 +1078,7 @@ class ConnectorService:
                 host=parsed.host,
                 port=parsed.port,
                 scheme=parsed.scheme,
-                description=strip_control(report.notes) if report.notes else None,
+                description=self._evidence(report.notes),
                 request=self._evidence(report.request),
                 response=self._evidence(report.response),
             )
