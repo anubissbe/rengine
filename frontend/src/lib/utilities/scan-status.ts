@@ -10,7 +10,7 @@ import Pause from '@lucide/svelte/icons/pause';
 import type { ScanActivityStatus, ScanRead, ScanStatus, ScanStatusCounts } from '$lib/types/scan';
 import type { BadgeVariant } from '$lib/components/ui/badge';
 import type { IconComponent } from '$lib/config/icons';
-import { SURFACE, SurfaceDimension } from '$lib/config/surface';
+import { SURFACE_ORDER, SurfaceDimension } from '$lib/config/surface';
 
 export const SCAN_STATUS_LABEL: Record<ScanStatus, string> = {
 	pending: 'Queued',
@@ -212,48 +212,21 @@ export interface CountPill {
 }
 
 export function scanCountPills(scan: ScanRead): CountPill[] {
-	return [
-		{
-			key: 'web',
-			icon: SURFACE[SurfaceDimension.WEB_ASSETS].icon,
-			label: SURFACE[SurfaceDimension.WEB_ASSETS].label,
-			value: scan.subdomains_found,
-			emphasis: false
-		},
-		{
-			key: 'endpoints',
-			icon: SURFACE[SurfaceDimension.ENDPOINTS].icon,
-			label: SURFACE[SurfaceDimension.ENDPOINTS].label,
-			value: scan.endpoints_found,
-			emphasis: false
-		},
-		{
-			key: 'services',
-			icon: SURFACE[SurfaceDimension.SERVICES].icon,
-			label: SURFACE[SurfaceDimension.SERVICES].label,
-			value: scan.open_ports_found,
-			emphasis: false
-		},
-		{
-			key: 'ips',
-			icon: SURFACE[SurfaceDimension.IPS].icon,
-			label: SURFACE[SurfaceDimension.IPS].label,
-			value: scan.ips_found,
-			emphasis: false
-		},
-		{
-			key: 'vulns',
-			icon: SURFACE[SurfaceDimension.VULNERABILITIES].icon,
-			label: SURFACE[SurfaceDimension.VULNERABILITIES].label,
-			value: scan.vulnerabilities_found,
-			emphasis: scan.vulnerabilities_found > 0
-		},
-		{
-			key: 'http',
-			icon: Radio,
-			label: 'HTTP responses',
-			value: scan.http_assets_found,
-			emphasis: false
-		}
-	];
+	const pills: CountPill[] = SURFACE_ORDER.filter((spec) => spec.countColumns.length).map(
+		(spec) => ({
+			key: spec.key,
+			icon: spec.icon,
+			label: spec.label,
+			value: (scan[spec.countColumns[0]] as number) ?? 0,
+			emphasis: spec.key === SurfaceDimension.VULNERABILITIES && scan.vulnerabilities_found > 0
+		})
+	);
+	pills.push({
+		key: 'http',
+		icon: Radio,
+		label: 'HTTP responses',
+		value: scan.http_assets_found,
+		emphasis: false
+	});
+	return pills;
 }
