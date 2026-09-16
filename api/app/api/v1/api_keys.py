@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentSuperuser
 from app.core.database import get_session
-from channels.settings import valid_telegram_token
-from channels.telegram.driver import TelegramError
+from channels.telegram.driver import TelegramError, valid_token
 from channels.telegram.driver import verify as verify_bot
 from shared.enums.api_key import APIProvider
 from shared.models.api_key import APIKeyCreate, APIKeyRead, APIKeyUpdate, ProviderInfo
@@ -49,7 +48,7 @@ async def _test_intigriti(key_value: str, _key_meta: dict | None) -> dict:
 
 
 async def _test_telegram(key_value: str, _key_meta: dict | None) -> dict:
-    if not valid_telegram_token(key_value):
+    if not valid_token(key_value):
         msg = "The bot token does not have the shape Telegram issues."
         raise ValueError(msg)
     try:

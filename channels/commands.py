@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shlex
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any
 
@@ -127,16 +127,19 @@ def catalog() -> dict[str, CommandSpec]:
     specs: dict[str, CommandSpec] = {}
 
     for name, (title, description) in BUILTIN.items():
-        specs[name] = CommandSpec(
-            name=name,
-            tool=None,
-            source=CommandSource.BUILTIN.value,
-            title=title,
-            description=description,
-            capability=Capability.READ.value,
-            touches_target=False,
-            queued=False,
-            value_field="",
+        _add(
+            specs,
+            CommandSpec(
+                name=name,
+                tool=None,
+                source=CommandSource.BUILTIN.value,
+                title=title,
+                description=description,
+                capability=Capability.READ.value,
+                touches_target=False,
+                queued=False,
+                value_field="",
+            ),
         )
 
     for spec in mcp_registry.registry().values():
@@ -203,9 +206,7 @@ def catalog() -> dict[str, CommandSpec]:
         )
 
     for name, spec in list(specs.items()):
-        specs[name] = CommandSpec(
-            **{**spec.__dict__, "group": _group_of(name, spec.source)}
-        )
+        specs[name] = replace(spec, group=_group_of(name, spec.source))
     return specs
 
 
@@ -281,7 +282,8 @@ def parse(text: str) -> Parsed | None:
     kwargs: dict[str, str] = {}
     for token in tokens[1:]:
         key, sep, value = token.partition("=")
-        if sep and key and key.replace("_", "").isalnum() and not key[0].isdigit():
+        plain_key = key.replace("_", "").replace("-", "")
+        if sep and key and plain_key.isalnum() and not key[0].isdigit():
             kwargs[key.lower().replace("-", "_")] = value
         else:
             bare.append(token)

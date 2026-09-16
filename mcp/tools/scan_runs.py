@@ -13,7 +13,7 @@ from mcp.capabilities import Capability
 from mcp.context import ToolContext
 from mcp.dimensions import dimension
 from mcp.errors import ToolError
-from mcp.phrasing import elapsed, n, short_id
+from mcp.phrasing import elapsed, number, short_id
 from mcp.result import ToolResult
 from mcp.tools._scope import find_target
 from mcp.tools.base import Tool, ToolGroup, ToolInput
@@ -429,7 +429,7 @@ def _status_blocks(row: Scan, stages: dict[str, list[str]], target) -> list:
             fact("Error", row.error or None),
         ),
         facts(
-            *[fact(label, n(count)) for label, count in found.items() if count],
+            *[fact(label, number(count)) for label, count in found.items() if count],
             title="Found so far",
         ),
     ]

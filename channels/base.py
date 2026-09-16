@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import ClassVar
 
 from channels.render import Line, Message, chunk
+
+
+class DriverError(Exception):
+    """A channel refused the request."""
+
+    def __init__(self, description: str):
+        super().__init__(description)
+        self.description = description
 
 
 @dataclass(frozen=True)
@@ -51,3 +62,29 @@ class Channel(ABC):
         for message in chunk(lines, self.limit):
             last = await self.send(external_id, message)
         return last
+
+
+class ChatLocks:
+    """One lock per chat, dropped once nothing holds or awaits it."""
+
+    def __init__(self) -> None:
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._users: dict[str, int] = {}
+
+    def __len__(self) -> int:
+        return len(self._locks)
+
+    @asynccontextmanager
+    async def hold(self, key: str) -> AsyncIterator[None]:
+        lock = self._locks.setdefault(key, asyncio.Lock())
+        self._users[key] = self._users.get(key, 0) + 1
+        try:
+            async with lock:
+                yield
+        finally:
+            remaining = self._users[key] - 1
+            if remaining:
+                self._users[key] = remaining
+            else:
+                del self._users[key]
+                del self._locks[key]

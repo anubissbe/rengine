@@ -6,6 +6,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from shared.enums.api_key import APIProvider
+
 
 class ChannelKind(StrEnum):
     TELEGRAM = "telegram"
@@ -15,6 +17,11 @@ CHANNEL_ORDER: tuple[str, ...] = tuple(c.value for c in ChannelKind)
 
 CHANNEL_LABELS: dict[str, str] = {
     ChannelKind.TELEGRAM.value: "Telegram",
+}
+
+# the API key a channel signs in with, shared with notifications
+CHANNEL_PROVIDERS: dict[str, APIProvider] = {
+    ChannelKind.TELEGRAM.value: APIProvider.TELEGRAM,
 }
 
 

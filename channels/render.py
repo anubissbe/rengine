@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
+from mcp.phrasing import short_id
 from mcp.result import ToolResult
-from shared.definitions.toolbox import Block, BlockKind, RunStatus, ToolRunRead
+from shared.definitions.toolbox import (
+    Block,
+    BlockKind,
+    Pivot,
+    RunStatus,
+    ToolRunRead,
+)
 from toolbox.base import ToolOutcome
 
 BOLD = "bold"
@@ -67,8 +76,25 @@ def code(text: str) -> Span:
     return Span(text, CODE)
 
 
+def linkable(url: str) -> bool:
+    """A chat client refuses a link it cannot resolve: localhost, an address, no dot."""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").rstrip(".").lower()
+    except ValueError:
+        return False
+    if parts.scheme not in {"http", "https"} or "." not in host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return False
+
+
 def link(text: str, url: str) -> Span:
-    return Span(text, LINK, url)
+    """An unlinkable URL is sent as copyable text."""
+    return Span(text, LINK, url) if linkable(url) else code(url)
 
 
 def line(*spans: Span | str) -> Line:
@@ -91,7 +117,18 @@ def utf16_len(text: str) -> int:
 
 
 def _line_len(spans: Line) -> int:
-    return sum(len(s.text) for s in spans)
+    return sum(utf16_len(s.text) for s in spans)
+
+
+def _split_at(text: str, room: int) -> tuple[str, str]:
+    """The longest head that fits `room` code units, where an emoji counts two."""
+    used = 0
+    for index, char in enumerate(text):
+        width = utf16_len(char)
+        if used + width > room:
+            return text[:index], text[index:]
+        used += width
+    return text, ""
 
 
 def _clip_line(spans: Line, limit: int) -> list[Line]:
@@ -102,14 +139,15 @@ def _clip_line(spans: Line, limit: int) -> list[Line]:
     for span in spans:
         text = span.text
         while text:
-            room = limit - used
-            if room <= 0:
-                pieces.append(current)
-                current, used = [], 0
-                room = limit
-            head, text = text[:room], text[room:]
+            head, text = _split_at(text, limit - used)
+            if not head:
+                if used:
+                    pieces.append(current)
+                    current, used = [], 0
+                    continue
+                head, text = text[:1], text[1:]  # a limit under one character
             current.append(Span(head, span.style, span.url))
-            used += len(head)
+            used += utf16_len(head)
     if current:
         pieces.append(current)
     return pieces or [[]]
@@ -172,10 +210,6 @@ def _is_id_key(key: str) -> bool:
     return key == "id" or key.endswith("_id")
 
 
-def _short_id(value: str) -> str:
-    return value[:8]
-
-
 def _fmt_scalar(key: str, value: Any) -> Span:  # noqa: PLR0911
     if isinstance(value, bool):
         return plain("yes" if value else "no")
@@ -185,7 +219,7 @@ def _fmt_scalar(key: str, value: Any) -> Span:  # noqa: PLR0911
         return plain(str(value))
     text = str(value)
     if _UUID.match(text) or _HASH.match(text):
-        return code(_short_id(text))
+        return code(short_id(text))
     if _is_id_key(key):
         return code(text[:MAX_VALUE])
     stamp = _ISO.match(text)
@@ -371,63 +405,72 @@ def _block(block: Block) -> list[Line]:
 # ---------- results ----------
 
 
-def result_lines(
-    result: ToolResult, rewrite: Callable[[str], str] | None = None
+def _assemble(
+    heading: str | None,
+    body: list[Line],
+    caveats: list[str],
+    pivot: Span | None,
+    rewrite: Callable[[str], str] | None = None,
 ) -> list[Line]:
-    """`rewrite` respells agent-facing text for the chat: tool names, ids, stamps."""
+    """One reply: heading, body, caveats, the link out."""
     fix = rewrite or (lambda text: text)
-    lead = result.blocks[0] if result.blocks else None
     out: list[Line] = []
-    if lead is None or lead.kind != BlockKind.HERO.value:
-        out.append(line(bold(result.summary)))
-    body = block_lines(result.blocks) if result.blocks else data_lines(result.data)
+    if heading:
+        out.append(line(bold(heading)))
     if body:
         if out:
             out.append(line(""))
         out.extend(body)
-    if result.caveats:
+    if caveats:
         out.append(line(""))
-        out.extend(line(italic(fix(c))) for c in result.caveats)
-    if result.pivot:
+        out.extend(line(italic(fix(c))) for c in caveats)
+    if pivot is not None:
         out.append(line(""))
-        out.append(line(link(OPEN_LABEL, result.pivot)))
+        out.append([pivot])
     return out
+
+
+def _pivot_span(pivot: Pivot | None, ui_base: str) -> Span | None:
+    """A toolbox pivot, with a relative href made absolute against the UI."""
+    href = pivot.href if pivot else None
+    if not href:
+        return None
+    if href.startswith("/"):
+        href = f"{ui_base.rstrip('/')}{href}"
+    return link(pivot.label or OPEN_LABEL, href)
+
+
+def result_lines(
+    result: ToolResult, rewrite: Callable[[str], str] | None = None
+) -> list[Line]:
+    """`rewrite` respells agent-facing text for the chat: tool names, ids, stamps."""
+    lead = result.blocks[0] if result.blocks else None
+    hero_leads = lead is not None and lead.kind == BlockKind.HERO.value
+    return _assemble(
+        None if hero_leads else result.summary,
+        block_lines(result.blocks) if result.blocks else data_lines(result.data),
+        result.caveats,
+        link(OPEN_LABEL, result.pivot) if result.pivot else None,
+        rewrite,
+    )
 
 
 def outcome_lines(outcome: ToolOutcome, ui_base: str) -> list[Line]:
-    out: list[Line] = [line(bold(outcome.summary))]
-    body = block_lines(outcome.blocks)
-    if body:
-        out.append(line(""))
-        out.extend(body)
-    if outcome.caveats:
-        out.append(line(""))
-        out.extend(line(italic(c)) for c in outcome.caveats)
-    if outcome.pivot and outcome.pivot.href:
-        href = outcome.pivot.href
-        if href.startswith("/"):
-            href = f"{ui_base.rstrip('/')}{href}"
-        out.append(line(""))
-        out.append(line(link(outcome.pivot.label or OPEN_LABEL, href)))
-    return out
+    return _assemble(
+        outcome.summary,
+        block_lines(outcome.blocks),
+        outcome.caveats,
+        _pivot_span(outcome.pivot, ui_base),
+    )
 
 
 def run_lines(run: ToolRunRead, ui_base: str) -> list[Line]:
     """A finished toolbox run, read back from its record."""
     if run.status != RunStatus.COMPLETED.value:
         return error_lines(run.error or "The run failed.")
-    out: list[Line] = [line(bold(run.summary or run.title))]
-    body = block_lines(run.blocks)
-    if body:
-        out.append(line(""))
-        out.extend(body)
-    if run.caveats:
-        out.append(line(""))
-        out.extend(line(italic(c)) for c in run.caveats)
-    if run.pivot and run.pivot.href:
-        href = run.pivot.href
-        if href.startswith("/"):
-            href = f"{ui_base.rstrip('/')}{href}"
-        out.append(line(""))
-        out.append(line(link(run.pivot.label or OPEN_LABEL, href)))
-    return out
+    return _assemble(
+        run.summary or run.title,
+        block_lines(run.blocks),
+        run.caveats,
+        _pivot_span(run.pivot, ui_base),
+    )

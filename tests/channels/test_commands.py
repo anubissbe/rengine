@@ -128,7 +128,14 @@ def test_names_fold_case_separators_and_the_bot_suffix():
             ["example.com"],
             {"query": "is:kev and severity:critical"},
         ),
+        (
+            "/scan example.com scan-engine=deep",
+            "scan",
+            ["example.com"],
+            {"scan_engine": "deep"},
+        ),
         ("/add a.com b.com", "add", ["a.com", "b.com"], {}),
+        ("/vulns https://a.com/p?q=1", "vulns", ["https://a.com/p?q=1"], {}),
         ("/help", "help", [], {}),
     ],
 )

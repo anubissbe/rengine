@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from shared.enums.api_key import APIProvider
 from shared.enums.notification import NotificationSeverity, NotificationType
-from shared.enums.notification_channel import DIRECT_POST_PROVIDERS
+from shared.enums.notification_channel import (
+    DIRECT_POST_PROVIDERS,
+    NotificationProvider,
+)
 from shared.http import get_sync_client
 from shared.models.notification_channel import NotificationChannel
 from shared.utils.crypto import try_decrypt
@@ -46,7 +49,7 @@ def wants(pref: dict, ntype: NotificationType, severity: NotificationSeverity) -
     return severity_passes((pref or {}).get("min_severity", "info"), severity.value)
 
 
-SHARED_BOT_PROVIDER = "telegram"
+SHARED_BOT_PROVIDER = NotificationProvider.TELEGRAM.value
 
 
 def with_shared_bot(provider: str, config: dict, lookup) -> dict:
@@ -57,22 +60,27 @@ def with_shared_bot(provider: str, config: dict, lookup) -> dict:
     return {**(config or {}), "bot_token": token} if token else (config or {})
 
 
+def _shared_bot_targets(targets: list[dict], lookup) -> None:
+    for target in targets:
+        target["config"] = with_shared_bot(target["provider"], target["config"], lookup)
+
+
 def build_apprise_url(provider: str, config: dict) -> str | None:
     config = config or {}
-    if provider == "slack":
+    if provider == NotificationProvider.SLACK.value:
         m = re.search(
             r"hooks\.slack\.com/services/(.+)$", config.get("webhook_url", "")
         )
         return f"slack://{m.group(1)}" if m else None
-    if provider == "discord":
+    if provider == NotificationProvider.DISCORD.value:
         m = re.search(r"/webhooks/(\d+)/([\w-]+)", config.get("webhook_url", ""))
         return f"discord://{m.group(1)}/{m.group(2)}" if m else None
-    if provider == "telegram":
+    if provider == NotificationProvider.TELEGRAM.value:
         token, chat = config.get("bot_token"), config.get("chat_id")
         return f"tgram://{token}/{chat}" if token and chat else None
-    if provider == "email":
+    if provider == NotificationProvider.EMAIL.value:
         return _email_url(config)
-    if provider == "custom":
+    if provider == NotificationProvider.CUSTOM.value:
         return config.get("apprise_url") or None
     return None
 
@@ -129,7 +137,7 @@ def _send_direct(
     url = (config or {}).get("webhook_url")
     if not url:
         return False, "Missing webhook URL."
-    if provider == "teams":
+    if provider == NotificationProvider.TEAMS.value:
         payload = {
             "@type": "MessageCard",
             "@context": "https://schema.org/extensions",
@@ -215,9 +223,7 @@ def dispatch_sync(
 
     rows = session.execute(_channel_query(channel_ids)).scalars().all()
     targets = _channels_to_targets(list(rows))
-    lookup = SyncAPIKeyService(session).get_key_for_provider
-    for target in targets:
-        target["config"] = with_shared_bot(target["provider"], target["config"], lookup)
+    _shared_bot_targets(targets, SyncAPIKeyService(session).get_key_for_provider)
     if targets:
         _fan_out(
             targets,
@@ -246,10 +252,7 @@ async def dispatch_async(
     targets = _channels_to_targets(list(result.scalars().all()))
     if targets:
         token = await APIKeyService(session).get_key_for_provider(APIProvider.TELEGRAM)
-        for target in targets:
-            target["config"] = with_shared_bot(
-                target["provider"], target["config"], lambda _p: token
-            )
+        _shared_bot_targets(targets, lambda _provider: token)
         await asyncio.to_thread(
             _fan_out,
             targets,

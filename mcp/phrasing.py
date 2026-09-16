@@ -28,5 +28,5 @@ def stamp(value) -> str:
     return text[:16].replace("T", " ")
 
 
-def n(value: int | None) -> str:
+def number(value: int | None) -> str:
     return "" if value is None else f"{value:,}"

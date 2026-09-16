@@ -7,6 +7,7 @@ import uuid
 from channels import pairing, settings, stepup
 from channels.identity import effective_capabilities, identity_for
 from channels.models import ChannelChat
+from channels.telegram import driver
 from mcp.capabilities import Capability
 from shared.definitions.channels import PAIRING_ALPHABET, PAIRING_CODE_LENGTH
 from shared.models.user import User
@@ -28,9 +29,9 @@ def test_redact_strips_the_token_from_any_text():
 
 
 def test_token_shape_is_checked_before_it_is_stored():
-    assert settings.valid_telegram_token(TOKEN)
-    assert not settings.valid_telegram_token("not-a-token")
-    assert not settings.valid_telegram_token("")
+    assert driver.valid_token(TOKEN)
+    assert not driver.valid_token("not-a-token")
+    assert not driver.valid_token("")
 
 
 def test_a_pairing_code_is_unambiguous_and_short():

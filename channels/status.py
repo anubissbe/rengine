@@ -1,13 +1,13 @@
-"""The listener's heartbeat, a Redis key with a TTL. No key means the service is down."""
+"""Listener state in Redis: the heartbeat under a TTL, and the update cursor without one."""
 
 from __future__ import annotations
 
 import contextlib
 import json
-from typing import Any
 
 from shared.definitions.channels import STATUS_TTL
 from shared.logging import get_logger
+from shared.redis import async_client
 
 logger = get_logger(__name__)
 
@@ -15,15 +15,9 @@ KEY = "channels:status:{channel}"
 OFFSET_KEY = "channels:offset:{channel}"
 
 
-def _client() -> Any:
-    from app.core.ratelimit import _client as redis_client  # noqa: PLC0415
-
-    return redis_client()
-
-
 async def publish(channel: str, payload: dict) -> None:
     try:
-        await _client().set(
+        await async_client().set(
             KEY.format(channel=channel), json.dumps(payload), ex=STATUS_TTL
         )
     except Exception as exc:
@@ -32,7 +26,7 @@ async def publish(channel: str, payload: dict) -> None:
 
 async def read(channel: str) -> dict | None:
     try:
-        raw = await _client().get(KEY.format(channel=channel))
+        raw = await async_client().get(KEY.format(channel=channel))
     except Exception as exc:
         logger.debug("listener status unavailable", error=str(exc))
         return None
@@ -45,7 +39,7 @@ async def read(channel: str) -> dict | None:
 
 async def load_offset(channel: str) -> int:
     try:
-        raw = await _client().get(OFFSET_KEY.format(channel=channel))
+        raw = await async_client().get(OFFSET_KEY.format(channel=channel))
     except Exception:
         return 0
     return int(raw or 0)
@@ -53,4 +47,4 @@ async def load_offset(channel: str) -> int:
 
 async def save_offset(channel: str, offset: int) -> None:
     with contextlib.suppress(Exception):
-        await _client().set(OFFSET_KEY.format(channel=channel), str(offset))
+        await async_client().set(OFFSET_KEY.format(channel=channel), str(offset))

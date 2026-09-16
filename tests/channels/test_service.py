@@ -10,6 +10,7 @@ from channels import pairing
 from channels import service as channel_service
 from channels.models import ChannelChatUpdate, ChannelSettingsUpdate, PairingApprove
 from channels.service import ChannelConfigError, ChannelService
+from mcp import telemetry
 from mcp.models import McpCeiling
 from shared.definitions.channels import ChannelKind, ChatState
 from shared.enums.api_key import APIProvider
@@ -154,3 +155,31 @@ def test_the_command_catalog_is_served():
     assert scan.usage.startswith("/scan <target>")
     assert scan.group == "scans"
     assert any(a.name == "target" and a.required for a in scan.args)
+
+
+async def test_a_chat_call_is_found_behind_newer_calls_from_other_clients(estate):
+    mark = uuid.uuid4().hex[:8]
+    record = telemetry.CallRecord(
+        token_id=uuid.uuid4(),
+        token_name="chat",
+        client=CHANNEL,
+        tool=mark,
+        ok=True,
+        duration_ms=1,
+    )
+    await telemetry.record(record)
+    for _ in range(20):
+        await telemetry.record(
+            telemetry.CallRecord(
+                token_id=uuid.uuid4(),
+                token_name="agent",
+                client="http",
+                tool="query_assets",
+                ok=True,
+                duration_ms=1,
+            )
+        )
+
+    rows = await ChannelService(estate.session, CHANNEL).calls(limit=5)
+
+    assert any(row.tool == mark for row in rows), "a cut before the filter hides it"

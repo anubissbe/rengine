@@ -7,7 +7,7 @@ from pydantic import Field
 from mcp import links
 from mcp.context import ToolContext
 from mcp.dimensions import DIMENSIONS
-from mcp.phrasing import n, stamp
+from mcp.phrasing import number, stamp
 from mcp.result import ToolResult
 from mcp.tools._scope import resolve
 from mcp.tools.base import Tool, ToolGroup, ToolInput
@@ -120,19 +120,19 @@ def _blocks(headline: str, surface: list[dict], risk, summary) -> list:
         hero(headline, sub=f"Last observed {stamp(latest)}" if latest else None),
         facts(
             *[
-                fact(s["label"], n(s["count"]) if s["covered"] else "not scanned")
+                fact(s["label"], number(s["count"]) if s["covered"] else "not scanned")
                 for s in surface
             ]
         ),
         facts(
-            fact("Findings", n(risk.total)),
-            fact("Need review", n(risk.actionable)),
-            fact("KEV", n(risk.kev) if risk.kev else None),
+            fact("Findings", number(risk.total)),
+            fact("Need review", number(risk.actionable)),
+            fact("KEV", number(risk.kev) if risk.kev else None),
             fact("Severity", severities or None),
-            fact("Sensitive services", n(summary.sensitive_services) or None),
+            fact("Sensitive services", number(summary.sensitive_services) or None),
             fact(
                 "Scans running",
-                n(summary.scans_running) if summary.scans_running else None,
+                number(summary.scans_running) if summary.scans_running else None,
             ),
         ),
     ]

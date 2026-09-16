@@ -6,10 +6,12 @@ import uuid
 from datetime import datetime
 from types import ModuleType
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from channels import commands, pairing, settings, status, stepup
+from channels.base import DriverError
 from channels.identity import effective_capabilities
 from channels.models import (
     BotInfo,
@@ -65,6 +67,18 @@ class ChannelNotFoundError(LookupError):
     """No channel of that name."""
 
 
+def _granted(wanted: list[str], ceiling: dict[str, bool]) -> list[str]:
+    """The capabilities the ceiling allows, with anything above it refused by name."""
+    asked = normalize(wanted)
+    granted = within_ceiling(asked, ceiling)
+    refused = [c for c in asked if c not in granted]
+    if refused:
+        names = ", ".join(CAPABILITY_LABELS[c] for c in refused)
+        msg = f"{names} is switched off for this channel. Raise the ceiling first."
+        raise ChannelConfigError(msg)
+    return granted
+
+
 def _parse(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -81,6 +95,7 @@ class ChannelService:
             raise ChannelNotFoundError(msg)
         self.session = session
         self.channel = channel
+        self.label = CHANNEL_LABELS[channel]
         self.driver = DRIVERS[channel]
 
     # ---------- config ----------
@@ -101,7 +116,7 @@ class ChannelService:
     async def status(self) -> ChannelStatus:
         row = await self.row()
         cfg = settings.read(row)
-        secret = await settings.bot_token(self.session)
+        secret = await self._token()
         heartbeat = await status.read(self.channel) or {}
         chats = (
             (
@@ -115,7 +130,7 @@ class ChannelService:
         calls = await self.calls()
         return ChannelStatus(
             channel=self.channel,
-            label=CHANNEL_LABELS[self.channel],
+            label=self.label,
             configured=secret is not None,
             enabled=cfg.enabled,
             started_at=cfg.started_at,
@@ -153,9 +168,9 @@ class ChannelService:
 
         if data.enabled is not None and data.enabled != cfg.enabled:
             if data.enabled:
-                secret = await settings.bot_token(self.session)
+                secret = await self._token()
                 if secret is None:
-                    msg = "Add a Telegram API key before starting the listener."
+                    msg = f"Add a {self.label} API key before starting the listener."
                     raise ChannelConfigError(msg)
                 cfg.bot = await self._verify(secret)
                 cfg.started_at = utc_now()
@@ -174,9 +189,10 @@ class ChannelService:
 
     async def verify(self) -> ChannelVerifyResult:
         row = await self.row()
-        secret = await settings.bot_token(self.session)
+        secret = await self._token()
         if secret is None:
-            return ChannelVerifyResult(ok=False, error="No Telegram API key is saved.")
+            error = f"No {self.label} API key is saved."
+            return ChannelVerifyResult(ok=False, error=error)
         try:
             info = await self._verify(secret)
         except ChannelConfigError as exc:
@@ -188,11 +204,14 @@ class ChannelService:
         await self.session.commit()
         return ChannelVerifyResult(ok=True, bot=info)
 
+    async def _token(self) -> str | None:
+        return await settings.bot_token(self.session, self.channel)
+
     async def _verify(self, secret: str) -> BotInfo:
         try:
             return await self.driver.verify(secret)
-        except self.driver.TelegramError as exc:
-            msg = f"Telegram refused the bot token: {exc.description}."
+        except DriverError as exc:
+            msg = f"{self.label} refused the bot token: {exc.description}."
             raise ChannelConfigError(msg) from exc
 
     async def _reconcile_chats(self, ceiling: dict[str, bool]) -> None:
@@ -250,12 +269,7 @@ class ChannelService:
             raise ChannelConfigError(msg)
 
         cfg = settings.read(await self.row())
-        granted = within_ceiling(normalize(data.capabilities), cfg.ceiling)
-        refused = [c for c in normalize(data.capabilities) if c not in granted]
-        if refused:
-            names = ", ".join(CAPABILITY_LABELS[c] for c in refused)
-            msg = f"{names} is switched off for this channel. Raise the ceiling first."
-            raise ChannelConfigError(msg)
+        granted = _granted(data.capabilities, cfg.ceiling)
 
         active = await self._count_active()
         if active >= MAX_CHATS:
@@ -331,13 +345,7 @@ class ChannelService:
             row.project_id = data.project_id
         if data.capabilities is not None:
             cfg = settings.read(await self.row())
-            granted = within_ceiling(normalize(data.capabilities), cfg.ceiling)
-            refused = [c for c in normalize(data.capabilities) if c not in granted]
-            if refused:
-                names = ", ".join(CAPABILITY_LABELS[c] for c in refused)
-                msg = f"{names} is switched off for this channel. Raise the ceiling first."
-                raise ChannelConfigError(msg)
-            row.capabilities = granted
+            row.capabilities = _granted(data.capabilities, cfg.ceiling)
         self.session.add(row)
         await self.session.commit()
         await self.session.refresh(row)
@@ -377,19 +385,15 @@ class ChannelService:
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def _count_active(self) -> int:
-        rows = (
-            (
-                await self.session.execute(
-                    select(ChannelChat).where(
-                        ChannelChat.channel == self.channel,
-                        ChannelChat.state == ChatState.ACTIVE.value,
-                    )
-                )
+        total = await self.session.scalar(
+            select(func.count())
+            .select_from(ChannelChat)
+            .where(
+                ChannelChat.channel == self.channel,
+                ChannelChat.state == ChatState.ACTIVE.value,
             )
-            .scalars()
-            .all()
         )
-        return len(rows)
+        return int(total or 0)
 
     async def _read(self, row: ChannelChat) -> ChannelChatRead:
         user = await self.session.get(User, row.user_id) if row.user_id else None
@@ -421,7 +425,7 @@ class ChannelService:
     async def _notify(self, external_id: str, text: str) -> None:
         row = await self.row()
         cfg = settings.read(row)
-        secret = await settings.bot_token(self.session)
+        secret = await self._token()
         if not cfg.enabled or secret is None:
             return
         try:
@@ -455,12 +459,8 @@ class ChannelService:
         return out
 
     async def calls(self, limit: int = 200) -> list[McpCallRead]:
-        entries = await telemetry.recent(limit)
-        return [
-            McpCallRead(**entry)
-            for entry in entries
-            if entry.get("client") == self.channel
-        ]
+        entries = await telemetry.recent(limit, client=self.channel)
+        return [McpCallRead(**entry) for entry in entries]
 
 
 async def catalog(session) -> list[ChannelCatalogEntry]:
@@ -473,7 +473,7 @@ async def catalog(session) -> list[ChannelCatalogEntry]:
             ChannelCatalogEntry(
                 channel=kind,
                 label=CHANNEL_LABELS[kind],
-                configured=await settings.bot_token(session) is not None,
+                configured=await settings.bot_token(session, kind) is not None,
                 enabled=cfg.enabled,
                 running=bool(heartbeat.get("running")),
             )

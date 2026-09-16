@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from channels import settings, status
-from channels.base import Channel, Inbound
+from channels.base import Channel, ChatLocks, Inbound
 from channels.dispatch import Dispatcher
 from channels.models import BotInfo, ChannelConfig
 from channels.render import Message
@@ -95,7 +95,7 @@ class TelegramListener:
         self._last_error_at: datetime | None = None
         self._failures = 0
         self._tasks: set[asyncio.Task] = set()
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._chats = ChatLocks()
 
     # ---------- config ----------
 
@@ -103,7 +103,7 @@ class TelegramListener:
         async with self.sessions() as session:
             row = await session.get(ChannelConfig, self.kind)
             try:
-                secret = await settings.bot_token(session)
+                secret = await settings.bot_token(session, self.kind)
             except Exception as exc:
                 self._note_error(type(exc).__name__)
                 secret = None
@@ -251,8 +251,7 @@ class TelegramListener:
         dispatcher = self._dispatcher
         if dispatcher is None:
             return
-        lock = self._locks.setdefault(inbound.external_id, asyncio.Lock())
-        async with lock:
+        async with self._chats.hold(inbound.external_id):
             try:
                 await dispatcher.handle(inbound)
             except TelegramError as exc:

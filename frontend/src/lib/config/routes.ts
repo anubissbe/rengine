@@ -1,3 +1,4 @@
+import { CHANNEL_ORDER, type ChannelKind } from './channels';
 import { FINDINGS_TABS, SURFACE, SURFACE_ORDER, type FindingsTab } from './surface';
 
 export const routeLabels: Record<string, string> = {
@@ -69,8 +70,8 @@ export const CONNECTOR_TABS = ['queue', 'discovered', 'settings'] as const;
 export type ConnectorTab = (typeof CONNECTOR_TABS)[number];
 export const MCP_TABS = ['server', 'tools', 'access', 'activity'] as const;
 export type McpTab = (typeof MCP_TABS)[number];
-export const REMOTE_CONTROL_TABS = ['telegram'] as const;
-export type RemoteControlTab = (typeof REMOTE_CONTROL_TABS)[number];
+export const REMOTE_CONTROL_TABS = CHANNEL_ORDER;
+export type RemoteControlTab = ChannelKind;
 export type AiSection = (typeof AI_SECTIONS)[number];
 export type ArsenalTab = (typeof ARSENAL_TABS)[number];
 

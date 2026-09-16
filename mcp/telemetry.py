@@ -5,11 +5,12 @@ from __future__ import annotations
 import contextlib
 import json
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from shared.logging import get_logger
+from shared.redis import async_client
 from shared.utils.datetime import utc_now
 
 logger = get_logger(__name__)
@@ -18,6 +19,7 @@ SESSION_KEY = "mcp:session:{token_id}:{client}"
 SESSION_INDEX = "mcp:sessions"
 CALLS_KEY = "mcp:calls"
 COUNTER_KEY = "mcp:calls:{day}"
+CLIENT_COUNTER_KEY = "mcp:calls:{day}:{client}"
 
 SESSION_TTL = 300
 CALLS_KEPT = 200
@@ -36,12 +38,6 @@ class CallRecord:
     detail: str | None = None
 
 
-def _client() -> Any:
-    from app.core.ratelimit import _client as redis_client  # noqa: PLC0415
-
-    return redis_client()
-
-
 async def touch(
     *,
     token_id: uuid.UUID,
@@ -53,7 +49,7 @@ async def touch(
     key = SESSION_KEY.format(token_id=token_id, client=_slug(client))
     now = utc_now()
     try:
-        redis = _client()
+        redis = async_client()
         raw = await redis.get(key)
         existing = json.loads(raw) if raw else {}
         payload = {
@@ -75,7 +71,7 @@ async def touch(
 
 async def sessions() -> list[dict]:
     try:
-        redis = _client()
+        redis = async_client()
         keys = sorted(await redis.smembers(SESSION_INDEX))
         if not keys:
             return []
@@ -94,7 +90,7 @@ async def sessions() -> list[dict]:
             live.append(json.loads(raw))
     if stale:
         with contextlib.suppress(Exception):
-            await _client().srem(SESSION_INDEX, *stale)
+            await async_client().srem(SESSION_INDEX, *stale)
     return sorted(live, key=lambda r: r.get("last_seen", ""), reverse=True)
 
 
@@ -102,7 +98,7 @@ async def drop(token_id: uuid.UUID) -> int:
     """Forget a session."""
     prefix = SESSION_KEY.format(token_id=token_id, client="")
     try:
-        redis = _client()
+        redis = async_client()
         keys = [k for k in await redis.smembers(SESSION_INDEX) if k.startswith(prefix)]
         if not keys:
             return 0
@@ -126,46 +122,69 @@ async def record(call: CallRecord) -> None:
         "detail": call.detail,
     }
     try:
-        redis = _client()
+        redis = async_client()
         await redis.lpush(CALLS_KEY, json.dumps(entry))
         await redis.ltrim(CALLS_KEY, 0, CALLS_KEPT - 1)
         await redis.expire(CALLS_KEY, CALLS_TTL)
-        counter = COUNTER_KEY.format(day=now.date().isoformat())
-        await redis.incr(counter)
-        await redis.expire(counter, COUNTER_TTL)
+        day = now.date().isoformat()
+        for counter in (
+            COUNTER_KEY.format(day=day),
+            CLIENT_COUNTER_KEY.format(day=day, client=_slug(call.client)),
+        ):
+            await redis.incr(counter)
+            await redis.expire(counter, COUNTER_TTL)
     except Exception as exc:
         logger.debug("mcp call telemetry skipped", error=str(exc))
 
 
-async def recent(limit: int = 100) -> list[dict]:
+async def recent(
+    limit: int = 100,
+    *,
+    client: str | None = None,
+    without: Collection[str] = (),
+) -> list[dict]:
+    """The newest calls a client made, filtered before the cut."""
     try:
-        raw = await _client().lrange(CALLS_KEY, 0, max(0, limit - 1))
+        raw = await async_client().lrange(CALLS_KEY, 0, CALLS_KEPT - 1)
     except Exception as exc:
         logger.debug("mcp call trail unavailable", error=str(exc))
         return []
     entries: list[dict] = []
     for item in raw:
         with contextlib.suppress(ValueError):
-            entries.append(json.loads(item))
+            entry = json.loads(item)
+            if _wanted(entry.get("client"), client, without):
+                entries.append(entry)
+        if len(entries) >= limit:
+            break
     return entries
 
 
-async def calls_today() -> int:
-    key = COUNTER_KEY.format(day=utc_now().date().isoformat())
+async def calls_today(without: Collection[str] = ()) -> int:
+    day = utc_now().date().isoformat()
+    keys = [COUNTER_KEY.format(day=day)]
+    keys += [CLIENT_COUNTER_KEY.format(day=day, client=_slug(c)) for c in without]
     try:
-        value = await _client().get(key)
+        values = await async_client().mget(keys)
     except Exception:
         return 0
-    return int(value or 0)
+    total = int(values[0] or 0)
+    return max(0, total - sum(int(v or 0) for v in values[1:]))
 
 
-async def last_call_at() -> datetime | None:
-    entries = await recent(1)
+async def last_call_at(without: Collection[str] = ()) -> datetime | None:
+    entries = await recent(1, without=without)
     if not entries:
         return None
     with contextlib.suppress(ValueError, TypeError):
         return datetime.fromisoformat(entries[0]["at"])
     return None
+
+
+def _wanted(value: str | None, client: str | None, without: Collection[str]) -> bool:
+    if client is not None:
+        return value == client
+    return value not in without
 
 
 def _slug(value: str) -> str:

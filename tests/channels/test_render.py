@@ -30,9 +30,25 @@ def test_a_line_longer_than_the_limit_is_split():
     assert [len(m.text) for m in messages] == [4000, 4000, 1000]
 
 
+def test_a_message_fits_the_limit_in_code_units_not_characters():
+    messages = chunk([line("🔥" * 60) for _ in range(40)], 400)
+    assert messages
+    for message in messages:
+        assert _utf16(message.text) <= 400
+
+
+def test_an_emoji_is_never_split_across_two_messages():
+    messages = chunk([line("🔥" * 9)], 5)
+    assert "".join(m.text for m in messages) == "🔥" * 9
+    assert all(_utf16(m.text) <= 5 for m in messages)
+
+
 def test_entities_use_utf16_offsets():
     messages = chunk(
-        [line("🔥 ", bold("Résumé"), " ", code("id")), line(link("Open", "https://x"))],
+        [
+            line("🔥 ", bold("Résumé"), " ", code("id")),
+            line(link("Open", "https://x.io")),
+        ],
         4000,
     )
     message = messages[0]
@@ -47,7 +63,7 @@ def test_entities_use_utf16_offsets():
         "type": "text_link",
         "offset": _utf16("🔥 Résumé id\n"),
         "length": 4,
-        "url": "https://x",
+        "url": "https://x.io",
     }
 
 
@@ -86,7 +102,7 @@ def test_result_lines_carry_summary_caveats_and_the_link():
     result = ToolResult(
         summary="3 findings match",
         data={"total": 3},
-        pivot="https://ui/scans/x?tab=vulnerabilities",
+        pivot="https://ui.example.com/scans/x?tab=vulnerabilities",
         caveats=["Observed yesterday."],
     )
     lines = result_lines(result)
@@ -96,7 +112,7 @@ def test_result_lines_carry_summary_caveats_and_the_link():
         s.style == render.ITALIC and s.text == "Observed yesterday." for s in flat
     )
     assert flat[-1].style == render.LINK
-    assert flat[-1].url == "https://ui/scans/x?tab=vulnerabilities"
+    assert flat[-1].url == "https://ui.example.com/scans/x?tab=vulnerabilities"
 
 
 def test_objects_render_as_their_text_and_hashes_shorten():
@@ -131,3 +147,24 @@ async def test_an_unknown_scan_prefix_is_named(estate):
     )
     with pytest.raises(CommandError, match="No scan matches zz"):
         await Dispatcher._expand_ids(Dispatcher, estate.session, chat, {"scan": "zz"})
+
+
+def test_a_url_telegram_refuses_is_sent_as_copyable_text():
+    """Telegram rejects the whole message when one entity URL is not a public URL."""
+    for url in (
+        "http://localhost:5173/targets/x",
+        "http://127.0.0.1:8000/",
+        "http://rengine/x",
+    ):
+        span = link("Open in reNgine", url)
+        assert span.style == render.CODE, url
+        assert span.url is None
+        assert span.text == url
+
+
+def test_a_real_url_is_still_a_link():
+    span = link(
+        "Open in reNgine", "https://rengine.example.com/surface/vulnerabilities"
+    )
+    assert span.style == render.LINK
+    assert span.url == "https://rengine.example.com/surface/vulnerabilities"

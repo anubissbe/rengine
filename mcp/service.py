@@ -120,8 +120,8 @@ class McpService:
             tokens_total=len(tokens),
             tokens_active=len(active),
             sessions=[_session(s) for s in raw_sessions],
-            calls_today=await telemetry.calls_today(),
-            last_call_at=await telemetry.last_call_at(),
+            calls_today=await telemetry.calls_today(CHANNEL_ORDER),
+            last_call_at=await telemetry.last_call_at(CHANNEL_ORDER),
             capabilities=capability_catalog(),
         )
 
@@ -141,11 +141,8 @@ class McpService:
         ]
 
     async def calls(self, limit: int = 100) -> list[McpCallRead]:
-        return [
-            McpCallRead(**entry)
-            for entry in await telemetry.recent(limit)
-            if entry.get("client") not in CHANNEL_ORDER
-        ]
+        entries = await telemetry.recent(limit, without=CHANNEL_ORDER)
+        return [McpCallRead(**entry) for entry in entries]
 
     async def disconnect(self, token_id: uuid.UUID) -> int:
         return await telemetry.drop(token_id)

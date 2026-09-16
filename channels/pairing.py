@@ -6,7 +6,6 @@ import contextlib
 import json
 import secrets
 from datetime import timedelta
-from typing import Any
 
 from shared.definitions.channels import (
     PAIRING_ALPHABET,
@@ -15,6 +14,7 @@ from shared.definitions.channels import (
     PENDING_PAIRINGS_MAX,
 )
 from shared.logging import get_logger
+from shared.redis import async_client
 from shared.utils.datetime import utc_now
 
 logger = get_logger(__name__)
@@ -22,12 +22,6 @@ logger = get_logger(__name__)
 CODE_KEY = "channels:pair:{channel}:{code}"
 CHAT_KEY = "channels:pair:chat:{channel}:{external_id}"
 INDEX_KEY = "channels:pair:index:{channel}"
-
-
-def _client() -> Any:
-    from app.core.ratelimit import _client as redis_client  # noqa: PLC0415
-
-    return redis_client()
 
 
 def new_code() -> str:
@@ -51,7 +45,7 @@ async def request(
     first_name: str | None,
 ) -> tuple[str | None, bool]:
     """(code, created). A live code is returned again; a full queue returns None."""
-    redis = _client()
+    redis = async_client()
     chat_key = CHAT_KEY.format(channel=channel, external_id=external_id)
     existing = await redis.get(chat_key)
     if existing:
@@ -88,7 +82,7 @@ async def request(
 
 
 async def pending(channel: str) -> list[dict]:
-    redis = _client()
+    redis = async_client()
     index = INDEX_KEY.format(channel=channel)
     codes = sorted(await redis.smembers(index))
     if not codes:
@@ -110,7 +104,7 @@ async def pending(channel: str) -> list[dict]:
 
 async def take(channel: str, code: str) -> dict | None:
     """Remove a pending request and return it."""
-    redis = _client()
+    redis = async_client()
     key = CODE_KEY.format(channel=channel, code=normalise(code))
     raw = await redis.get(key)
     if raw is None:
@@ -131,7 +125,7 @@ async def take(channel: str, code: str) -> dict | None:
 
 
 async def forget(channel: str, external_id: str) -> None:
-    redis = _client()
+    redis = async_client()
     chat_key = CHAT_KEY.format(channel=channel, external_id=external_id)
     code = await redis.get(chat_key)
     pipe = redis.pipeline(transaction=True)

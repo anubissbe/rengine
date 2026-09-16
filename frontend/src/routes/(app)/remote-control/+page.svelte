@@ -24,9 +24,9 @@
 	} from '$lib/config/routes';
 	import {
 		CHANNEL_LABELS,
+		CHANNEL_META,
 		CHANNEL_ORDER,
 		CHANNEL_VIEWS,
-		ChannelKind,
 		type ChannelView,
 		LISTENER_STATE_DOT,
 		LISTENER_STATE_LABELS,
@@ -51,7 +51,8 @@
 	);
 	let now = $state(Date.now());
 
-	const channel = $derived(activeTab as ChannelKind);
+	const channel = $derived(activeTab);
+	const meta = $derived(CHANNEL_META[channel]);
 	const status = $derived(remoteControl.status);
 	const listener = $derived(listenerState(status));
 	const canAdmin = $derived(auth.user?.is_superuser ?? false);
@@ -134,7 +135,7 @@
 					text={listener === 'unreachable'
 						? 'The channels service is not reporting. Check that it is running.'
 						: listener === 'faulted'
-							? (status.listener.last_error ?? 'Telegram refused the connection.')
+							? (status.listener.last_error ?? `${CHANNEL_LABELS[channel]} refused the connection.`)
 							: ''}
 				>
 					{#snippet child(props)}
@@ -167,7 +168,7 @@
 							Stop listener
 						</Button>
 					{:else}
-						<Hint text={status.configured ? '' : 'Add a Telegram API key first.'}>
+						<Hint text={status.configured ? '' : `Add a ${meta.apiKeyLabel} first.`}>
 							{#snippet child(props)}
 								<span {...props} class="inline-flex">
 									<LoadingButton

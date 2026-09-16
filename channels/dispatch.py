@@ -20,6 +20,7 @@ from mcp import limits, server, telemetry
 from mcp.capabilities import CAPABILITY_LABELS
 from mcp.context import TokenIdentity, ToolContext
 from mcp.errors import McpError
+from mcp.phrasing import short_id
 from shared.definitions.channels import (
     CHAT_GROUP_LABELS,
     ChatState,
@@ -43,7 +44,6 @@ logger = get_logger(__name__)
 
 INLINE_TIMEOUT = 60
 FOLLOW_POLL_SECONDS = 3
-SHORT_ID = 8
 _PREFIX = re.compile(r"^[0-9a-f-]{6,36}$")
 _UUID_IN_TEXT = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
@@ -324,7 +324,7 @@ class Dispatcher:
                 [
                     line(
                         f"{tool.title} for {label} queued. Run ",
-                        code(run.id[:SHORT_ID]),
+                        code(short_id(run.id)),
                         ". The result is sent when it completes.",
                     )
                 ],
@@ -378,7 +378,7 @@ class Dispatcher:
             run = await store.get(user_id, run_id)
             if run is None:
                 await self._say(
-                    external_id, f"Run {run_id[:SHORT_ID]} is no longer available."
+                    external_id, f"Run {short_id(run_id)} is no longer available."
                 )
                 return
             run = expire(run)
@@ -386,7 +386,7 @@ class Dispatcher:
                 break
         if run is None or run.status not in TERMINAL_STATUSES:
             await self._observe(identity, tool, False, started, "timeout")
-            await self._say(external_id, f"Run {run_id[:SHORT_ID]} did not complete.")
+            await self._say(external_id, f"Run {short_id(run_id)} did not complete.")
             return
         ok = run.status == RunStatus.COMPLETED.value
         await self._observe(identity, tool, ok, started, None if ok else run.error)
@@ -572,7 +572,7 @@ class Dispatcher:
         """Tool names become commands, ids and stamps get short."""
         for name, spec in commands.by_tool().items():
             text = re.sub(rf"\b{re.escape(name)}\b", f"/{spec.name}", text)
-        text = _UUID_IN_TEXT.sub(lambda m: m.group(0)[:SHORT_ID], text)
+        text = _UUID_IN_TEXT.sub(lambda m: short_id(m.group(0)), text)
         text = _STAMP_IN_TEXT.sub(r"\1 \2", text)
         return text.replace("via MCP", "from chat")
 
@@ -623,7 +623,7 @@ class Dispatcher:
                 continue
             matches = await self._scans_by_prefix(session, chat.project_id, prefix)
             if len(matches) > 1:
-                msg = f"{value} matches {len(matches)} scans. Add more characters."
+                msg = f"{value} matches more than one scan. Add more characters."
                 raise CommandError(msg)
             if matches:
                 scan_id, target_value = matches[0]
@@ -642,7 +642,7 @@ class Dispatcher:
             .join(Target, Target.id == Scan.target_id)
             .where(cast(Scan.id, String).like(f"{prefix}%"))
             .order_by(Scan.created_at.desc())
-            .limit(3)
+            .limit(2)
         )
         if project_id is not None:
             statement = statement.where(Scan.project_id == project_id)

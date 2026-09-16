@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from channels.models import BotInfo, ChannelConfig
 from mcp.capabilities import DEFAULT_CEILING
-from shared.definitions.channels import DEFAULT_RATE_LIMIT
-from shared.enums.api_key import APIProvider
+from shared.definitions.channels import CHANNEL_PROVIDERS, DEFAULT_RATE_LIMIT
 from shared.services.api_key.async_api_key import APIKeyService
 from shared.services.scan_resolve import MASK
 from shared.utils.datetime import utc_now
@@ -18,8 +16,6 @@ _RATE = "rate_limit_per_minute"
 _CEILING = "ceiling"
 _BOT = "bot"
 _STARTED = "started_at"
-
-TELEGRAM_TOKEN_RE = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{20,64}$")
 
 
 @dataclass
@@ -59,9 +55,10 @@ def write(row: ChannelConfig, settings: ChannelSettings) -> None:
     row.updated_at = utc_now()
 
 
-async def bot_token(session) -> str | None:
-    """The Telegram API key, shared with notifications."""
-    return await APIKeyService(session).get_key_for_provider(APIProvider.TELEGRAM)
+async def bot_token(session, channel: str) -> str | None:
+    """The channel's API key, shared with notifications."""
+    provider = CHANNEL_PROVIDERS[channel]
+    return await APIKeyService(session).get_key_for_provider(provider)
 
 
 def mask_secret(secret: str | None) -> str | None:
@@ -70,10 +67,6 @@ def mask_secret(secret: str | None) -> str | None:
         return None
     head, sep, _ = secret.partition(":")
     return f"{head}{sep}{MASK}" if sep else MASK
-
-
-def valid_telegram_token(value: str) -> bool:
-    return bool(TELEGRAM_TOKEN_RE.match(value.strip()))
 
 
 def redact(text: str, secret: str | None) -> str:

@@ -8,7 +8,7 @@ from pydantic import Field
 
 from mcp import links
 from mcp.context import ToolContext
-from mcp.phrasing import n, stamp
+from mcp.phrasing import number, stamp
 from mcp.result import ToolResult
 from mcp.tools._scope import project_for
 from mcp.tools.base import Tool, ToolGroup, ToolInput
@@ -132,12 +132,12 @@ def _blocks(headline: str, overview, risk, changes: list[dict]) -> list:
     return [
         hero(headline),
         facts(
-            fact("Targets", n(overview.targets_total)),
-            fact("Scanned", n(overview.targets_scanned)),
-            fact("Never scanned", n(overview.targets_never_scanned) or None),
-            fact("Findings", n(risk.total) if risk else None),
-            fact("Act now", n(tiers.get("act")) if tiers.get("act") else None),
-            fact("KEV", n(risk.kev) if risk and risk.kev else None),
+            fact("Targets", number(overview.targets_total)),
+            fact("Scanned", number(overview.targets_scanned)),
+            fact("Never scanned", number(overview.targets_never_scanned) or None),
+            fact("Findings", number(risk.total) if risk else None),
+            fact("Act now", number(tiers.get("act")) if tiers.get("act") else None),
+            fact("KEV", number(risk.kev) if risk and risk.kev else None),
         ),
         table(
             ["Target", "Last run", "Change"],

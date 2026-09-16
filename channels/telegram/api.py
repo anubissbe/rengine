@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from channels.base import DriverError
 from channels.models import BotInfo
 from channels.settings import redact
 from shared.http import get_async_client
@@ -19,7 +20,7 @@ _OK = 200
 _UNAUTHORIZED = 401
 
 
-class TelegramError(Exception):
+class TelegramError(DriverError):
     def __init__(
         self,
         description: str,
@@ -28,7 +29,6 @@ class TelegramError(Exception):
         retry_after: int | None = None,
     ):
         super().__init__(description)
-        self.description = description
         self.code = code
         self.retry_after = retry_after
 
