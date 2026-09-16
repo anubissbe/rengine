@@ -24,6 +24,10 @@ DEST="${2:-./backups}"
 DB_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2- || echo rengine)"
 DB_NAME="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2- || echo rengine)"
 VOLUMES=(vuln_templates wordlists report_fonts reports_out)
+# compose prefixes a volume with the project name, which is not always the directory
+PROJECT="$(docker compose config --format json 2>/dev/null \
+  | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | head -1)"
+PROJECT="${PROJECT:-$(basename "$HERE")}"
 
 WORK=""
 cleanup() { [ -n "$WORK" ] && rm -rf "$WORK"; return 0; }
@@ -45,15 +49,23 @@ dump() {
   say "database"
   docker compose exec -T db pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$work/db.dump"
 
+  # the worker writes scan media as root, so the tar runs as root too
   say "scan media"
-  tar -cf "$work/scan_media.tar" -C . scan_media 2>/dev/null || tar -cf "$work/scan_media.tar" -T /dev/null
+  if [ -d scan_media ]; then
+    docker run --rm -v "$HERE:/repo:ro" -v "$work:/to" alpine \
+      tar -cf /to/scan_media.tar -C /repo scan_media >/dev/null
+  else
+    tar -cf "$work/scan_media.tar" -T /dev/null
+  fi
 
   say "volumes"
   local vwork="$work/volumes"
   mkdir -p "$vwork"
   for volume in "${VOLUMES[@]}"; do
-    docker run --rm -v "$(basename "$HERE")_$volume:/from" -v "$vwork:/to" alpine \
-      sh -c "tar -cf /to/$volume.tar -C /from . 2>/dev/null || true" >/dev/null 2>&1 || true
+    docker volume inspect "${PROJECT}_$volume" >/dev/null 2>&1 \
+      || die "volume ${PROJECT}_$volume does not exist. Start the stack once before a backup."
+    docker run --rm -v "${PROJECT}_$volume:/from" -v "$vwork:/to" alpine \
+      sh -c "tar -cf /to/$volume.tar -C /from ." >/dev/null
   done
   tar -cf "$work/volumes.tar" -C "$vwork" .
 
@@ -88,14 +100,15 @@ restore() {
   docker compose exec -T db pg_restore -U "$DB_USER" -d "$DB_NAME" --no-owner < "$work/db.dump"
 
   say "scan media"
-  rm -rf scan_media && tar -xf "$work/scan_media.tar" -C .
+  docker run --rm -v "$HERE:/repo" -v "$work:/from:ro" alpine \
+    sh -c 'rm -rf /repo/scan_media && tar -xf /from/scan_media.tar -C /repo' >/dev/null
 
   say "volumes"
   local vwork="$work/volumes"
   mkdir -p "$vwork" && tar -xf "$work/volumes.tar" -C "$vwork"
   for volume in "${VOLUMES[@]}"; do
     [ -f "$vwork/$volume.tar" ] || continue
-    docker run --rm -v "$(basename "$HERE")_$volume:/to" -v "$vwork:/from" alpine \
+    docker run --rm -v "${PROJECT}_$volume:/to" -v "$vwork:/from" alpine \
       sh -c "rm -rf /to/* /to/..?* /to/.[!.]* 2>/dev/null; tar -xf /from/$volume.tar -C /to" >/dev/null
   done
 
