@@ -51,7 +51,19 @@ max-branches = 15
 
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "shared", "worker", "tools"]
+known-first-party = [
+    "app",
+    "channels",
+    "connectors",
+    "interest",
+    "mcp",
+    "reports",
+    "shared",
+    "stages",
+    "tools",
+    "toolbox",
+    "worker",
+]
 
 section-order = [
     "future",

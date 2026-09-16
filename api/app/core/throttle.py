@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 
 from app.config import settings
 from app.core.client_ip import client_id
-from app.core.ratelimit import _client
+from shared.redis import async_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         bucket = int(time.time() // 60)
         key = f"throttle:{client_id(request)}:{bucket}"
         try:
-            pipe = _client().pipeline(transaction=True)
+            pipe = async_client().pipeline(transaction=True)
             pipe.incr(key)
             pipe.expire(key, 60, nx=True)
             count, _ = await pipe.execute()
