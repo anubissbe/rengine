@@ -86,6 +86,7 @@ export const ROUTES = {
 	scans: '/scans',
 	notes: '/notes',
 	scansForTarget: (id: string) => `/scans?target=${id}`,
+	scansWhere: (query: Record<string, string>) => `/scans?${new URLSearchParams(query).toString()}`,
 	changes: (query?: Record<string, string>) => {
 		const params = new URLSearchParams(query ?? {});
 		const suffix = params.toString();

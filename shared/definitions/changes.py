@@ -43,7 +43,7 @@ class ChangeTone(StrEnum):
 SOURCE_LABELS: dict[str, str] = {
     "ct_log": "Certificate log",
     "watch": "Program watch",
-    "user": "Added by hand",
+    "user": "Manual",
     "api": "Platform API",
     "feed": "Public feed",
     "imported": "Imported",

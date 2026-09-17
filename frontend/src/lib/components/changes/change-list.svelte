@@ -14,9 +14,16 @@
 		loading?: boolean;
 		emptyTitle?: string;
 		truncated?: boolean;
+		total?: number;
 	}
 
-	let { items, loading = false, emptyTitle = 'No changes', truncated = false }: Props = $props();
+	let {
+		items,
+		loading = false,
+		emptyTitle = 'No changes',
+		truncated = false,
+		total = 0
+	}: Props = $props();
 
 	interface DayGroup {
 		key: string;
@@ -154,7 +161,7 @@
 		{/each}
 		{#if truncated}
 			<p class="py-3 text-center text-xs text-muted-foreground">
-				Newest {items.length.toLocaleString()} shown. Narrow by target, program or kind.
+				Newest {items.length.toLocaleString()} of {total.toLocaleString()}.
 			</p>
 		{/if}
 	</div>

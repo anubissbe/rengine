@@ -217,13 +217,19 @@
 	}
 
 	const NEW_TOKEN = 'is:new';
-	const NEW_PARAM: Record<string, string> = {
-		'web-assets': 'q',
-		ips: 'ip_q',
-		services: 'svc_q',
-		endpoints: 'ep_q',
-		vulnerabilities: 'vuln_q'
+	const QUERY_TABS: Record<string, true> = {
+		'web-assets': true,
+		ips: true,
+		services: true,
+		endpoints: true,
+		vulnerabilities: true
 	};
+	const NEW_PARAM: Record<string, string> = Object.fromEntries(
+		SURFACE_ORDER.filter((spec) => spec.tab in QUERY_TABS).map((spec) => [
+			spec.tab,
+			spec.queryParam
+		])
+	);
 	let activeSearch = $derived.by(() => {
 		switch (activeTab) {
 			case 'web-assets':
@@ -965,7 +971,7 @@
 						</Tabs.List>
 					</ScrollArea>
 					{#if activeTab in NEW_PARAM}
-						<Hint text="Only rows absent from the previous scan of this target">
+						<Hint text="Absent from the previous scan of this target">
 							{#snippet child(props)}
 								<Button
 									{...props}

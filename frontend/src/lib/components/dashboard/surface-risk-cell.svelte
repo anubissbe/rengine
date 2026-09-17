@@ -34,7 +34,8 @@
 	const actHref = ROUTES.results(VULNS.tab, undefined, {
 		[VULNS.queryParam]: 'is:exploitable or evidence:proven or severity:critical'
 	});
-	const STAT = 'flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5 hover:bg-muted';
+	const STAT = 'flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5';
+	const STAT_LINK = `${STAT} hover:bg-muted`;
 </script>
 
 <Cell
@@ -55,13 +56,13 @@
 	{/snippet}
 	{#if data}
 		<div class="grid grid-cols-3 gap-2">
-			<a href={liveHref} class={STAT}>
+			<a href={liveHref} class={STAT_LINK}>
 				<span class="text-lg leading-tight font-semibold tracking-tight tabular-nums">
 					{data.live.toLocaleString()}
 				</span>
 				<span class="truncate text-2xs text-muted-foreground">live web assets</span>
 			</a>
-			<a href={findingsHref} class={STAT}>
+			<a href={findingsHref} class={STAT_LINK}>
 				<span class="text-lg leading-tight font-semibold tracking-tight tabular-nums">
 					{data.findings.toLocaleString()}
 				</span>

@@ -39,7 +39,7 @@
 	let mode = $state<ChangeMode>(
 		MODE_KEYS.has(initial.get('mode') ?? '') ? (initial.get('mode') as ChangeMode) : 'since'
 	);
-	let window = $state<ChangeWindow>(
+	let range = $state<ChangeWindow>(
 		WINDOW_KEYS.has(initial.get('window') ?? '')
 			? (initial.get('window') as ChangeWindow)
 			: DEFAULT_CHANGE_WINDOW
@@ -50,7 +50,14 @@
 			? `${initial.get('platform')}:${initial.get('handle')}`
 			: ''
 	);
-	let kind = $state(initial.get('kind') ?? ALL);
+	const splitProgram = (v: string): [string, string] => {
+		const i = v.indexOf(':');
+		return i < 0 ? ['', ''] : [v.slice(0, i), v.slice(i + 1)];
+	};
+	const KIND_KEYS = new Set<string>(KIND_ORDER);
+	let kind = $state(
+		KIND_KEYS.has(initial.get('kind') ?? '') ? (initial.get('kind') as string) : ALL
+	);
 
 	let feed = $state<ChangeFeed | null>(null);
 	let loading = $state(false);
@@ -70,16 +77,22 @@
 	);
 	let programLabel = $derived.by(() => {
 		if (!program) return '';
-		const [platform, handle] = program.split(':', 2);
+		const [platform, handle] = splitProgram(program);
 		return (
 			watchesStore.watches.find((w) => w.platform === platform && w.handle === handle)
 				?.program_name ?? handle
 		);
 	});
+	let total = $derived(
+		feed
+			? kind === ALL
+				? Object.values(feed.counts).reduce((a, b) => a + b, 0)
+				: (feed.counts[kind] ?? 0)
+			: 0
+	);
 	let headline = $derived.by(() => {
 		if (!feed) return '';
-		const n = feed.items.length;
-		const what = n === 1 ? '1 change' : `${n.toLocaleString()} changes`;
+		const what = total === 1 ? '1 change' : `${total.toLocaleString()} changes`;
 		if (feed.basis === ChangeBasis.MARK) return `${what} since last visit`;
 		return `${what} in the ${CHANGE_WINDOWS.find((w) => w.key === feed?.window)?.text ?? 'window'}`;
 	});
@@ -88,17 +101,17 @@
 		const at = new Date(feed.since);
 		const stamp = `${formatShortDate(at)} ${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
 		if (feed.basis === ChangeBasis.MARK) return `Last visit ${stamp}`;
-		return mode === 'since' ? `First visit · from ${stamp}` : `From ${stamp}`;
+		return mode === 'since' ? `No earlier visit · from ${stamp}` : `From ${stamp}`;
 	});
 
 	function syncUrl() {
 		try {
 			const sp = new SvelteURLSearchParams();
 			if (mode !== 'since') sp.set('mode', mode);
-			if (mode === 'timeline' && window !== DEFAULT_CHANGE_WINDOW) sp.set('window', window);
+			if (mode === 'timeline' && range !== DEFAULT_CHANGE_WINDOW) sp.set('window', range);
 			if (targetId) sp.set('target', targetId);
 			if (program) {
-				const [platform, handle] = program.split(':', 2);
+				const [platform, handle] = splitProgram(program);
 				sp.set('platform', platform);
 				sp.set('handle', handle);
 			}
@@ -115,11 +128,11 @@
 		const my = ++reqId;
 		loading = true;
 		error = null;
-		const [platform, handle] = program ? program.split(':', 2) : ['', ''];
+		const [platform, handle] = splitProgram(program);
 		try {
 			const res = await changesApi.feed(projectId, {
 				since: mode === 'since' ? (sinceAt ?? undefined) : undefined,
-				window: mode === 'timeline' ? window : undefined,
+				window: mode === 'timeline' ? range : undefined,
 				target_id: targetId || undefined,
 				platform: platform || undefined,
 				handle: handle || undefined,
@@ -145,7 +158,7 @@
 	$effect(() => {
 		void projectId;
 		void mode;
-		void window;
+		void range;
 		void targetId;
 		void program;
 		void kind;
@@ -178,13 +191,9 @@
 	<div class="flex flex-wrap items-end justify-between gap-3">
 		<div class="flex flex-col gap-1">
 			<h1 class="text-xl font-semibold">{routeLabels.changes}</h1>
-			<p class="text-sm text-muted-foreground">
-				{#if feed}
-					{headline} · {subline}
-				{:else}
-					New assets, hosts, scope and targets
-				{/if}
-			</p>
+			{#if feed}
+				<p class="text-sm text-muted-foreground">{headline} · {subline}</p>
+			{/if}
 		</div>
 		<ToggleGroup.Root
 			type="single"
@@ -206,8 +215,8 @@
 		{#if mode === 'timeline'}
 			<ToggleGroup.Root
 				type="single"
-				value={window}
-				onValueChange={(v) => v && (window = v as ChangeWindow)}
+				value={range}
+				onValueChange={(v) => v && (range = v as ChangeWindow)}
 				variant="outline"
 				size="sm"
 				aria-label="Window"
@@ -298,6 +307,7 @@
 				<ChangeList
 					items={feed?.items ?? []}
 					{loading}
+					{total}
 					truncated={feed?.truncated ?? false}
 					emptyTitle={mode === 'since' && feed?.basis === ChangeBasis.MARK
 						? 'Nothing new since last visit'
