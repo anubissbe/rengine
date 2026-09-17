@@ -3,6 +3,7 @@
 	import TargetIcon from '@lucide/svelte/icons/target';
 	import RadarIcon from '@lucide/svelte/icons/radar';
 	import StickyNoteIcon from '@lucide/svelte/icons/sticky-note';
+	import HistoryIcon from '@lucide/svelte/icons/history';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
@@ -49,6 +50,7 @@
 			items: [
 				{ title: routeLabels.dashboard, url: ROUTES.dashboard, icon: LayoutDashboardIcon },
 				{ title: routeLabels.targets, url: ROUTES.targets, icon: TargetIcon },
+				{ title: routeLabels.changes, url: ROUTES.changes(), icon: HistoryIcon },
 				{ title: routeLabels.notes, url: ROUTES.notes, icon: StickyNoteIcon }
 			]
 		},

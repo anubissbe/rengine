@@ -7,6 +7,7 @@ from app.api.v1 import (
     auth,
     bounty_programs,
     celery_health,
+    changes,
     connectors,
     cves,
     dashboard,
@@ -97,6 +98,7 @@ router.include_router(secrets.router)
 router.include_router(cves.router)
 router.include_router(ai.router)
 router.include_router(dashboard.router)
+router.include_router(changes.router)
 router.include_router(celery_health.router)
 router.include_router(instance_settings.router)
 router.include_router(proxies.router)

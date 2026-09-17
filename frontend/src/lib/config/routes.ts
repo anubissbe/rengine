@@ -22,6 +22,7 @@ export const routeLabels: Record<string, string> = {
 	connectors: 'Connectors',
 	'remote-control': 'Remote control',
 	notes: 'Notes',
+	changes: 'Changes',
 	'bounty-hub': 'Bounty Hub',
 
 	reports: 'Reports',
@@ -85,6 +86,11 @@ export const ROUTES = {
 	scans: '/scans',
 	notes: '/notes',
 	scansForTarget: (id: string) => `/scans?target=${id}`,
+	changes: (query?: Record<string, string>) => {
+		const params = new URLSearchParams(query ?? {});
+		const suffix = params.toString();
+		return `/changes${suffix ? `?${suffix}` : ''}`;
+	},
 	surface: (tab: string, query?: Record<string, string>) => {
 		const params = new URLSearchParams(query ?? {});
 		const suffix = params.toString();

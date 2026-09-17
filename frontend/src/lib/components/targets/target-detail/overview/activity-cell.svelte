@@ -154,6 +154,12 @@
 				{total === 1 ? 'run' : 'runs'}
 			</span>
 		{/if}
+		<a
+			href={ROUTES.changes({ mode: 'timeline', target: target.id })}
+			class="text-xs text-muted-foreground hover:text-foreground hover:underline"
+		>
+			Timeline
+		</a>
 	{/snippet}
 	<ol class="flex flex-col">
 		{#each runs as { scan: s, previous, rescans } (s.id)}
