@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { routeLabels } from '$lib/config/routes';
+	import { ROUTES, routeLabels } from '$lib/config/routes';
+	import { SURFACE, SurfaceDimension } from '$lib/config/surface';
 	import { untrack } from 'svelte';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -89,6 +90,12 @@
 		return { findings, critical, web, targets, firsts, runs: overview.runs_in_window };
 	});
 
+	const WEB = SURFACE[SurfaceDimension.WEB_ASSETS];
+	const VULNS = SURFACE[SurfaceDimension.VULNERABILITIES];
+	let NEW_IN_WINDOW = $derived(`is:new and seen:<${days}d`);
+	const headlineHref = (spec: typeof WEB, q: string) =>
+		ROUTES.results(spec.tab, undefined, { [spec.queryParam]: q });
+
 	$effect(() => {
 		const pid = activeProject?.id;
 		untrack(() => {
@@ -146,16 +153,21 @@
 			{:else if headline && !firstRun}
 				<h1 class="max-w-[34ch] text-2xl leading-tight font-semibold tracking-tight text-balance">
 					{#if headline.critical}
-						<span class="text-destructive"
-							>{plural(headline.critical, 'critical finding', 'critical findings')}</span
+						<a
+							href={headlineHref(VULNS, `severity:critical and ${NEW_IN_WINDOW}`)}
+							class="text-destructive hover:underline"
+							>{plural(headline.critical, 'critical finding', 'critical findings')}</a
 						>
 						and
 					{/if}
-					{plural(headline.findings, 'finding', 'findings')} in {days} days.
+					<a href={headlineHref(VULNS, NEW_IN_WINDOW)} class="hover:underline"
+						>{plural(headline.findings, 'finding', 'findings')}</a
+					>
+					in {days} days.
 					<span class="font-medium text-muted-foreground">
-						{plural(headline.web, 'new web asset', 'new web assets')}{headline.targets
-							? ` on ${plural(headline.targets, 'target', 'targets')}`
-							: ''}.
+						<a href={headlineHref(WEB, NEW_IN_WINDOW)} class="hover:underline"
+							>{plural(headline.web, 'new web asset', 'new web assets')}</a
+						>{headline.targets ? ` on ${plural(headline.targets, 'target', 'targets')}` : ''}.
 					</span>
 				</h1>
 			{:else}

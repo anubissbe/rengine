@@ -328,9 +328,15 @@
 		selected = row;
 		drawerOpen = true;
 	}
+
+	let barH = $state(0);
+	let scrollRef = $state<HTMLElement | null>(null);
 </script>
 
-<div class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2">
+<div
+	class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2"
+	bind:clientHeight={barH}
+>
 	<QueryBar
 		bind:this={queryBar}
 		store={softwareQuerySchema}
@@ -347,7 +353,7 @@
 	/>
 </div>
 
-<Card.Root class="gap-0 overflow-hidden rounded-t-none border-t-0 py-0">
+<Card.Root class="gap-0 overflow-clip rounded-t-none border-t-0 py-0">
 	<div class="flex items-center gap-3 border-b pr-3 pl-2">
 		<div class="min-w-0 flex-1">
 			<CountTabs
@@ -440,18 +446,21 @@
 			{/if}
 		</EmptyState>
 	{:else}
-		<ScrollArea orientation="horizontal" class="min-h-0">
+		<ListHeader
+			sticky
+			top={barH}
+			follow={scrollRef}
+			lead={projectWide ? [TARGET_COLUMN, ...SOFTWARE_LEAD_COLUMNS] : SOFTWARE_LEAD_COLUMNS}
+			columns={shownColumns.filter((c) => c.key !== 'target')}
+			sortKey={sort.key}
+			sortDir={sort.dir}
+			{selectAllChecked}
+			selectAllLabel="Select every software CVE on this page"
+			onSelectAll={toggleSelectAll}
+			{onSort}
+		/>
+		<ScrollArea orientation="horizontal" class="min-h-0" bind:ref={scrollRef}>
 			<div class="min-w-max">
-				<ListHeader
-					lead={projectWide ? [TARGET_COLUMN, ...SOFTWARE_LEAD_COLUMNS] : SOFTWARE_LEAD_COLUMNS}
-					columns={shownColumns.filter((c) => c.key !== 'target')}
-					sortKey={sort.key}
-					sortDir={sort.dir}
-					{selectAllChecked}
-					selectAllLabel="Select every software CVE on this page"
-					onSelectAll={toggleSelectAll}
-					{onSort}
-				/>
 				<div class="divide-y divide-border/50 transition-opacity {refreshing ? 'opacity-60' : ''}">
 					{#each items as row (row.id)}
 						<SoftwareRow

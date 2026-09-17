@@ -15,6 +15,8 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import Hint from '$lib/components/hint.svelte';
 	import HighlightText from '../table/highlight-text.svelte';
+	import { goto } from '$app/navigation';
+	import { ROUTES } from '$lib/config/routes';
 	import OverflowPopover from '../table/overflow-popover.svelte';
 	import SeverityMark from './severity-mark.svelte';
 	import { stopProp } from '$lib/utilities';
@@ -29,7 +31,8 @@
 		TEMPLATE_SET_ICONS,
 		TEMPLATE_SET_LABELS,
 		VULN_STATE_LABELS,
-		VulnState
+		VulnState,
+		Severity
 	} from '$lib/config/vulnerabilities';
 	import {
 		ACTIONS_BODY,
@@ -92,6 +95,9 @@
 	let openCount = $derived(it.states[VulnState.OPEN] ?? 0);
 	let reviewed = $derived(it.findings - openCount);
 	let allReviewed = $derived(openCount === 0 && it.findings > 0);
+	let emphasised = $derived(
+		!allReviewed && (it.severity === Severity.CRITICAL || it.severity === Severity.HIGH)
+	);
 	let reach = $derived.by(() => {
 		const hosts = plural(it.hosts, 'web asset', 'web assets');
 		if (it.addresses > 0 && it.addresses < it.hosts) {
@@ -115,7 +121,7 @@
 </script>
 
 <div
-	class="group relative flex cursor-pointer items-start gap-3 px-4 transition-colors {pad} {tone}"
+	class="group relative isolate flex cursor-pointer items-start gap-3 px-4 transition-colors {pad} {tone}"
 	role="button"
 	tabindex={0}
 	data-vuln-row-index={index}
@@ -130,10 +136,17 @@
 	}}
 >
 	<span
-		class="absolute inset-y-0 left-0 w-[3px] {allReviewed ? 'opacity-30' : ''}"
+		class="absolute inset-y-0 left-0 w-1 {allReviewed ? 'opacity-30' : ''}"
 		style="background:{fill}"
 		aria-hidden="true"
 	></span>
+	{#if emphasised}
+		<span
+			class="pointer-events-none absolute inset-0 -z-10"
+			style="background:color-mix(in oklch, {fill} 6%, transparent)"
+			aria-hidden="true"
+		></span>
+	{/if}
 
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -305,15 +318,23 @@
 			{:else if col.key === 'risk'}
 				<div class="flex min-w-0 flex-wrap items-center gap-1">
 					{#if it.cve_ids.length}
-						<button
-							type="button"
-							class="flex h-4 items-center"
-							onclick={(e) => pivot(e, exactToken('cve', it.cve_ids[0]))}
-						>
-							<Badge variant="outline" class="px-1 font-mono text-2xs font-normal hover:bg-accent">
-								{it.cve_ids[0]}
-							</Badge>
-						</button>
+						<Hint text="Open the CVE page">
+							{#snippet child(props)}
+								<a
+									{...props}
+									href={ROUTES.cve(it.cve_ids[0])}
+									class="flex h-4 items-center"
+									onclick={stopProp}
+								>
+									<Badge
+										variant="outline"
+										class="px-1 font-mono text-2xs font-normal hover:bg-accent"
+									>
+										{it.cve_ids[0]}
+									</Badge>
+								</a>
+							{/snippet}
+						</Hint>
 						{#if it.cve_ids.length > 1}
 							<OverflowPopover
 								class="shrink-0"
@@ -321,7 +342,7 @@
 								shown={1}
 								label="CVEs"
 								mono
-								onSelect={(c) => onFilter(exactToken('cve', c))}
+								onSelect={(c) => goto(ROUTES.cve(c))}
 							/>
 						{/if}
 					{/if}

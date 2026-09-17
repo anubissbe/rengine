@@ -116,6 +116,13 @@ export const VULN_STATE_LABELS: Record<string, string> = {
 	[VulnState.ACCEPTED]: 'Risk accepted'
 };
 
+export const VULN_STATE_KEYS: Record<string, string> = {
+	[VulnState.OPEN]: 'o',
+	[VulnState.CONFIRMED]: 'c',
+	[VulnState.FALSE_POSITIVE]: 'f',
+	[VulnState.ACCEPTED]: 'a'
+};
+
 export const VULN_STATE_HELP: Record<string, string> = {
 	[VulnState.OPEN]: 'Not reviewed.',
 	[VulnState.CONFIRMED]: 'Reviewed and reproduced.',

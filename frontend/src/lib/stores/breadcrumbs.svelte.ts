@@ -1,6 +1,11 @@
 import { SvelteMap } from 'svelte/reactivity';
 
-const overrides = new SvelteMap<string, string>();
+export interface Crumb {
+	label: string;
+	href: string;
+}
+
+const overrides = new SvelteMap<string, string | Crumb[]>();
 
 export const breadcrumbStore = {
 	get overrides() {
@@ -11,12 +16,22 @@ export const breadcrumbStore = {
 		overrides.set(segment, label);
 	},
 
+	setTrail(segment: string, crumbs: Crumb[]) {
+		overrides.set(segment, crumbs);
+	},
+
 	remove(segment: string) {
 		overrides.delete(segment);
 	},
 
 	getLabel(segment: string): string | undefined {
-		return overrides.get(segment);
+		const v = overrides.get(segment);
+		return typeof v === 'string' ? v : undefined;
+	},
+
+	getTrail(segment: string): Crumb[] | undefined {
+		const v = overrides.get(segment);
+		return Array.isArray(v) ? v : undefined;
 	},
 
 	clear() {

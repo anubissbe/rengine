@@ -7,13 +7,35 @@
 	import { scansStore } from '$lib/stores/scans.svelte';
 	import ScanHistoryTable from '$lib/components/scans/scan-history-table.svelte';
 	import LaunchDialog from '$lib/components/scans/launch/launch-dialog.svelte';
-	import type { ScanRead } from '$lib/types/scan';
+	import { untrack } from 'svelte';
+	import {
+		SCAN_STATUSES,
+		SCAN_TIME_RANGES,
+		type ScanRead,
+		type ScanStatus,
+		type ScanTimeRange
+	} from '$lib/types/scan';
 
 	let showLaunch = $state(false);
 	let launchTargetId = $state<string | undefined>(undefined);
 	let launchTargetIds = $state<string[] | undefined>(undefined);
 	let rerunScan = $state<ScanRead | null>(null);
 	let targetFilter = $derived(page.url.searchParams.get('target') ?? undefined);
+
+	$effect(() => {
+		const status = page.url.searchParams.get('status');
+		const range = page.url.searchParams.get('range');
+		const ready =
+			Boolean(scansStore.filters.projectId) &&
+			scansStore.filters.projectId === projectsStore.activeProject?.id;
+		if (!ready) return;
+		untrack(() => {
+			if (status && SCAN_STATUSES.includes(status as ScanStatus))
+				scansStore.setStatuses([status as ScanStatus]);
+			if (range && SCAN_TIME_RANGES.some((r) => r.key === range))
+				scansStore.setTimeRange(range as ScanTimeRange);
+		});
+	});
 
 	function newScan() {
 		if (!projectsStore.activeProject) {

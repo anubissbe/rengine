@@ -62,7 +62,10 @@
 	</div>
 	{#snippet footer()}
 		<span>
-			{total.toLocaleString()} runs in {days} days · {failed} failed
+			{total.toLocaleString()} runs in {days} days ·
+			<a href="{ROUTES.scans}?status=failed&range={window}" class="hover:underline">
+				{failed} failed
+			</a>
 		</span>
 	{/snippet}
 </Cell>

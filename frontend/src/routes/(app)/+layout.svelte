@@ -122,8 +122,10 @@
 		const segments = path.split('/').filter(Boolean);
 
 		return segments
-			.map((segment, index) => {
+			.flatMap((segment, index) => {
 				const href = '/' + segments.slice(0, index + 1).join('/');
+				const trail = breadcrumbStore.getTrail(segment);
+				if (trail) return trail;
 				const override = breadcrumbStore.getLabel(segment);
 				if (override) return { label: override, href };
 

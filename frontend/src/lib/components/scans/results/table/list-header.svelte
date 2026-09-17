@@ -13,6 +13,9 @@
 		sortKey: string;
 		sortDir: 1 | -1;
 		onSort: (key: string) => void;
+		sticky?: boolean;
+		top?: number;
+		follow?: HTMLElement | null;
 	}
 
 	let {
@@ -23,8 +26,25 @@
 		onSelectAll,
 		sortKey,
 		sortDir,
-		onSort
+		onSort,
+		sticky = false,
+		top = 0,
+		follow = null
 	}: Props = $props();
+
+	let wrap = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		const viewport = follow?.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]');
+		const el = wrap;
+		if (!viewport || !el) return;
+		const sync = () => {
+			el.scrollLeft = viewport.scrollLeft;
+		};
+		sync();
+		viewport.addEventListener('scroll', sync, { passive: true });
+		return () => viewport.removeEventListener('scroll', sync);
+	});
 </script>
 
 {#snippet cell(col: TableColumn)}
@@ -45,31 +65,37 @@
 {/snippet}
 
 <div
-	class="flex items-center gap-3 border-b bg-muted/30 px-4 py-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+	bind:this={wrap}
+	class={sticky ? 'z-10 overflow-x-hidden bg-card md:sticky' : ''}
+	style={sticky ? `top: calc(var(--scan-tabs-h, 0px) + ${top}px)` : undefined}
 >
-	{#if onSelectAll}
-		<div class="hidden shrink-0 sm:flex">
-			<Checkbox
-				checked={selectAllChecked === true}
-				indeterminate={selectAllChecked === 'indeterminate'}
-				onCheckedChange={onSelectAll}
-				aria-label={selectAllLabel}
-			/>
+	<div
+		class="flex items-center gap-3 border-b bg-muted/30 px-4 py-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+	>
+		{#if onSelectAll}
+			<div class="hidden shrink-0 sm:flex">
+				<Checkbox
+					checked={selectAllChecked === true}
+					indeterminate={selectAllChecked === 'indeterminate'}
+					onCheckedChange={onSelectAll}
+					aria-label={selectAllLabel}
+				/>
+			</div>
+		{/if}
+		{#each lead as col (col.key)}
+			<div
+				class="{col.grow === undefined ? '' : col.grow ? 'min-w-0 flex-1' : 'shrink-0'} {col.width}"
+			>
+				{@render cell(col)}
+			</div>
+		{/each}
+		{#each columns as col (col.key)}
+			<div class={columnCell(col)}>
+				{@render cell(col)}
+			</div>
+		{/each}
+		<div class={ACTIONS_PIN}>
+			<div class="{ACTIONS_BODY} bg-muted/30"></div>
 		</div>
-	{/if}
-	{#each lead as col (col.key)}
-		<div
-			class="{col.grow === undefined ? '' : col.grow ? 'min-w-0 flex-1' : 'shrink-0'} {col.width}"
-		>
-			{@render cell(col)}
-		</div>
-	{/each}
-	{#each columns as col (col.key)}
-		<div class={columnCell(col)}>
-			{@render cell(col)}
-		</div>
-	{/each}
-	<div class={ACTIONS_PIN}>
-		<div class="{ACTIONS_BODY} bg-muted/30"></div>
 	</div>
 </div>

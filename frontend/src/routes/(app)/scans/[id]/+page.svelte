@@ -52,7 +52,7 @@
 	import VulnerabilitiesTable from '$lib/components/scans/results/vulnerabilities-table.svelte';
 	import SoftwareTable from '$lib/components/scans/results/software-table.svelte';
 	import SecretsTable from '$lib/components/scans/results/secrets-table.svelte';
-	import { relativeTime } from '$lib/utilities/dates';
+	import { formatShortDate, relativeTime } from '$lib/utilities/dates';
 	import { writeClipboard } from '$lib/utilities/clipboard';
 	import {
 		durationLabel,
@@ -60,9 +60,16 @@
 		isOpenStatus,
 		scanStatusIcon,
 		SCAN_STATUS_LABEL,
-		SCAN_POLL_MS
+		SCAN_POLL_MS,
+		elapsedSeconds,
+		formatSeconds
 	} from '$lib/utilities/scan-status';
-	import { emptyQuery, type WebAssetQuery } from '$lib/utilities/scan-insights';
+	import {
+		appendToken,
+		emptyQuery,
+		tokenize,
+		type WebAssetQuery
+	} from '$lib/utilities/scan-insights';
 	import { emptyIpQuery, type IpQuery } from '$lib/utilities/ip-groups';
 	import { emptyServiceQuery, type ServiceQuery } from '$lib/utilities/services';
 	import { emptyEndpointQuery, type EndpointQuery } from '$lib/utilities/endpoints';
@@ -78,7 +85,8 @@
 	import CorrelationTab from '$lib/components/scans/results/correlation/correlation-tab.svelte';
 	import NotePanel from '$lib/components/notes/note-panel.svelte';
 	import InterestingTable from '$lib/components/scans/results/interesting/interesting-table.svelte';
-	import { plannedStages } from '$lib/utilities/scan-progress';
+	import { plannedStages, stageProgress } from '$lib/utilities/scan-progress';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import type { TargetType } from '$lib/types/target';
 	import { SCAN_COUNT_COLUMNS } from '$lib/types/scan';
 	import type { ScanRead, ScanActivityRead, ScanCommandRead } from '$lib/types/scan';
@@ -155,18 +163,20 @@
 		}
 	}
 
-	const initialTab = page.url.searchParams.get('tab');
-	let activeTab = $state<ScanTab>(
-		initialTab && (SCAN_TABS as readonly string[]).includes(initialTab)
-			? (initialTab as ScanTab)
-			: 'overview'
-	);
+	function resolveTab(v: string | null): ScanTab {
+		return v && (SCAN_TABS as readonly string[]).includes(v) ? (v as ScanTab) : 'overview';
+	}
+	let activeTab = $state<ScanTab>(resolveTab(page.url.searchParams.get('tab')));
 
-	function setTab(v: string) {
+	function setTab(v: string, params: Record<string, string> = {}) {
 		activeTab = v as ScanTab;
 		try {
 			const sp = new SvelteURLSearchParams(location.search);
 			sp.set('tab', v);
+			for (const [k, value] of Object.entries(params)) {
+				if (value) sp.set(k, value);
+				else sp.delete(k);
+			}
 			replaceState(`?${sp.toString()}`, page.state);
 		} catch {
 			// ignore
@@ -175,7 +185,7 @@
 
 	function applyFilter(search: string) {
 		webQuery = { ...emptyQuery(), search };
-		setTab('web-assets');
+		setTab('web-assets', { q: search });
 	}
 
 	function openTab(tab: string, filter?: string) {
@@ -185,26 +195,88 @@
 		}
 		if (tab === 'ips') {
 			ipQuery = { ...emptyIpQuery(), search: filter };
-			setTab('ips');
+			setTab('ips', { ip_q: filter });
 			return;
 		}
 		if (tab === 'endpoints') {
 			endpointQuery = { ...emptyEndpointQuery(), search: filter };
-			setTab('endpoints');
+			setTab('endpoints', { ep_q: filter });
 			return;
 		}
 		if (tab === 'services') {
 			serviceQuery = { ...emptyServiceQuery(), search: filter };
-			setTab('services');
+			setTab('services', { svc_q: filter });
 			return;
 		}
 		if (tab === 'vulnerabilities') {
 			vulnQuery = { ...emptyVulnQuery(), search: filter };
-			setTab('vulnerabilities');
+			setTab('vulnerabilities', { vuln_q: filter });
 			return;
 		}
 		applyFilter(filter);
 	}
+
+	const NEW_TOKEN = 'is:new';
+	const NEW_PARAM: Record<string, string> = {
+		'web-assets': 'q',
+		ips: 'ip_q',
+		services: 'svc_q',
+		endpoints: 'ep_q',
+		vulnerabilities: 'vuln_q'
+	};
+	let activeSearch = $derived.by(() => {
+		switch (activeTab) {
+			case 'web-assets':
+				return webQuery.search;
+			case 'ips':
+				return ipQuery.search;
+			case 'services':
+				return serviceQuery.search;
+			case 'endpoints':
+				return endpointQuery.search;
+			case 'vulnerabilities':
+				return vulnQuery.search;
+			default:
+				return '';
+		}
+	});
+	let newOnly = $derived(tokenize(activeSearch).includes(NEW_TOKEN));
+
+	function toggleNew() {
+		const search = newOnly
+			? tokenize(activeSearch)
+					.filter((t) => t !== NEW_TOKEN)
+					.join(' ')
+			: appendToken(activeSearch, NEW_TOKEN);
+		switch (activeTab) {
+			case 'web-assets':
+				webQuery = { ...webQuery, search };
+				break;
+			case 'ips':
+				ipQuery = { ...ipQuery, search };
+				break;
+			case 'services':
+				serviceQuery = { ...serviceQuery, search };
+				break;
+			case 'endpoints':
+				endpointQuery = { ...endpointQuery, search };
+				break;
+			case 'vulnerabilities':
+				vulnQuery = { ...vulnQuery, search };
+				break;
+			default:
+				return;
+		}
+		setTab(activeTab, { [NEW_PARAM[activeTab]]: search });
+	}
+
+	let stripRun = $derived(
+		scan && isLiveStatus(scan.status) ? liveScans.runFor(scan.id) : undefined
+	);
+	let stripProgress = $derived(
+		scan ? stageProgress(scan, stripRun, plannedStages(scan, engineCatalogStore.stages)) : null
+	);
+	let stripElapsed = $derived(scan ? elapsedSeconds(scan, now) : null);
 
 	function onKeydown(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -398,19 +470,30 @@
 
 	let lastScanId = page.params.id ?? '';
 	$effect(() => {
-		if (scanId && scanId !== lastScanId) {
-			lastScanId = scanId;
-			untrack(() => {
-				webQuery = emptyQuery();
-				ipQuery = emptyIpQuery();
-				serviceQuery = emptyServiceQuery();
-				endpointQuery = emptyEndpointQuery();
-				vulnQuery = emptyVulnQuery();
+		const url = page.url;
+		const id = scanId;
+		untrack(() => {
+			const changed = Boolean(id) && id !== lastScanId;
+			if (changed) {
+				lastScanId = id;
 				resultTicks = {};
 				history = [];
 				historyLoaded = false;
-			});
-		}
+			}
+			const tab = resolveTab(url.searchParams.get('tab'));
+			if (tab !== activeTab) activeTab = tab;
+			const read = (key: string) => url.searchParams.get(key) ?? '';
+			if (changed || read('q') !== webQuery.search)
+				webQuery = { ...emptyQuery(), search: read('q') };
+			if (changed || read('ip_q') !== ipQuery.search)
+				ipQuery = { ...emptyIpQuery(), search: read('ip_q') };
+			if (changed || read('svc_q') !== serviceQuery.search)
+				serviceQuery = { ...emptyServiceQuery(), search: read('svc_q') };
+			if (changed || read('ep_q') !== endpointQuery.search)
+				endpointQuery = { ...emptyEndpointQuery(), search: read('ep_q') };
+			if (changed || read('vuln_q') !== vulnQuery.search)
+				vulnQuery = { ...emptyVulnQuery(), search: read('vuln_q') };
+		});
 	});
 
 	async function loadPipeline(projectId: string) {
@@ -448,7 +531,14 @@
 		try {
 			scan = await scansApi.get(scanId, project.id);
 			bumpChangedDimensions(before, scan);
-			if (!silent) breadcrumbStore.set(scanId, `${scan.execution_config.target_value} scan`);
+			if (!silent)
+				breadcrumbStore.setTrail(scanId, [
+					{ label: scan.execution_config.target_value, href: ROUTES.target(scan.target_id) },
+					{
+						label: `${scan.scope === 'focused' ? 'Focused scan' : 'Scan'} · ${formatShortDate(scan.started_at ?? scan.created_at)}`,
+						href: ROUTES.scan(scanId)
+					}
+				]);
 			const statusChanged = scan.status !== lastStatus;
 			lastStatus = scan.status;
 			await Promise.all([
@@ -591,11 +681,13 @@
 
 <div class="flex w-full flex-col gap-5 px-4 py-4 md:px-6">
 	<a
-		href={focused && scan?.parent_scan_id ? ROUTES.scan(scan.parent_scan_id) : ROUTES.scans}
+		href={focused && scan?.parent_scan_id ? ROUTES.scan(scan.parent_scan_id) : targetHref}
 		class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
 	>
 		<ArrowLeft class="size-3.5" />
-		{focused && scan?.parent_scan_id ? 'Parent run' : 'Scans'}
+		{focused && scan?.parent_scan_id
+			? 'Parent run'
+			: (scan?.execution_config.target_value ?? routeLabels.scans)}
 	</a>
 
 	{#if loading && !scan}
@@ -813,6 +905,31 @@
 									'text-muted-foreground'} {scan.status === 'running' ? 'animate-spin' : ''}"
 								aria-label={SCAN_STATUS_LABEL[scan.status]}
 							/>
+							{#if isLiveStatus(scan.status) && stripProgress}
+								<span class="text-xs text-muted-foreground tabular-nums">
+									{stripProgress.label} · {stripProgress.done} of {stripProgress.total}{#if stripElapsed != null}
+										· {formatSeconds(stripElapsed)}{/if}
+								</span>
+							{:else if !isOpenStatus(scan.status)}
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-7 gap-1.5 text-xs"
+									onclick={() => (showRescan = true)}
+								>
+									<RefreshCw class="size-3.5" /> Re-scan
+								</Button>
+								{#if comparable}
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-7 gap-1.5 text-xs"
+										href={ROUTES.compare(scan.id, comparable.id)}
+									>
+										<GitCompareArrows class="size-3.5" /> Compare
+									</Button>
+								{/if}
+							{/if}
 						</div>
 					{/if}
 					<ScrollArea orientation="horizontal" class="min-w-0 flex-1" scrollbarXClasses="h-1">
@@ -847,6 +964,22 @@
 							{/each}
 						</Tabs.List>
 					</ScrollArea>
+					{#if activeTab in NEW_PARAM}
+						<Hint text="Only rows absent from the previous scan of this target">
+							{#snippet child(props)}
+								<Button
+									{...props}
+									variant={newOnly ? 'secondary' : 'ghost'}
+									size="sm"
+									class="h-7 shrink-0 gap-1.5 text-xs"
+									aria-pressed={newOnly}
+									onclick={toggleNew}
+								>
+									<Sparkles class="size-3.5" /> New
+								</Button>
+							{/snippet}
+						</Hint>
+					{/if}
 					<TabMenu rows={tabMenuRows} onToggle={onTabToggle} />
 					{#if surfaceLink}
 						<a

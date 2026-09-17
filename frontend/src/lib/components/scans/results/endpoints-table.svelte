@@ -1031,6 +1031,9 @@
 			cursor = -1;
 		}
 	}
+
+	let barH = $state(0);
+	let scrollRef = $state<HTMLElement | null>(null);
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -1038,6 +1041,7 @@
 <div
 	class="relative z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2"
 	bind:this={headEl}
+	bind:clientHeight={barH}
 >
 	<QueryBar
 		bind:this={queryBar}
@@ -1138,7 +1142,7 @@
 	</EmptyState>
 {/snippet}
 
-<Card.Root class="gap-0 overflow-hidden rounded-t-none border-t-0 py-0">
+<Card.Root class="gap-0 overflow-clip rounded-t-none border-t-0 py-0">
 	<div class="border-b px-2">
 		<CountTabs tabs={classTabs} value={classTab} counts={classCounts} onChange={setClassTab} />
 	</div>
@@ -1308,16 +1312,19 @@
 				class="rounded-none border-0 bg-transparent py-16"
 			/>
 		{:else if gonePage}
-			<ScrollArea orientation="horizontal">
-				<ListHeader
-					lead={ENDPOINT_LEAD_COLUMNS}
-					columns={ENDPOINT_COLUMNS.filter((c) =>
-						(listColumnsPref ?? DEFAULT_VISIBLE_ENDPOINT_COLUMNS).includes(c.key)
-					)}
-					sortKey={sort.key}
-					sortDir={sort.dir}
-					onSort={toggleSort}
-				/>
+			<ListHeader
+				sticky
+				top={barH}
+				follow={scrollRef}
+				lead={ENDPOINT_LEAD_COLUMNS}
+				columns={ENDPOINT_COLUMNS.filter((c) =>
+					(listColumnsPref ?? DEFAULT_VISIBLE_ENDPOINT_COLUMNS).includes(c.key)
+				)}
+				sortKey={sort.key}
+				sortDir={sort.dir}
+				onSort={toggleSort}
+			/>
+			<ScrollArea orientation="horizontal" bind:ref={scrollRef}>
 				<div class="divide-y divide-border/50 transition-opacity {goneLoading ? 'opacity-60' : ''}">
 					{#each gonePage.items as e (e.id)}
 						<EndpointRow
@@ -1453,17 +1460,20 @@
 			{:else if items.length === 0}
 				{@render emptyStates()}
 			{:else}
-				<ScrollArea orientation="horizontal">
-					<ListHeader
-						lead={ENDPOINT_LEAD_COLUMNS}
-						columns={shownColumns}
-						sortKey={sort.key}
-						sortDir={sort.dir}
-						{selectAllChecked}
-						selectAllLabel="Select every endpoint on this page"
-						onSelectAll={toggleSelectAll}
-						onSort={toggleSort}
-					/>
+				<ListHeader
+					sticky
+					top={barH}
+					follow={scrollRef}
+					lead={ENDPOINT_LEAD_COLUMNS}
+					columns={shownColumns}
+					sortKey={sort.key}
+					sortDir={sort.dir}
+					{selectAllChecked}
+					selectAllLabel="Select every endpoint on this page"
+					onSelectAll={toggleSelectAll}
+					onSort={toggleSort}
+				/>
+				<ScrollArea orientation="horizontal" bind:ref={scrollRef}>
 					<div class="divide-y divide-border/50 transition-opacity {loading ? 'opacity-60' : ''}">
 						{#each items as e, i (e.id)}
 							<div data-endpoint-row-index={i}>

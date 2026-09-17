@@ -484,32 +484,36 @@
 		<Tooltip.Root>
 			<Tooltip.Trigger>
 				{#snippet child({ props })}
-					<span
-						{...props}
-						class="inline-flex items-center gap-1 font-mono text-xs {httpStatusTextClass(
-							s.http_status
-						)}"
-					>
-						{#if s.http_status == null}
-							—
-						{:else}
-							{#if AUTH_CODES.has(s.http_status)}
+					{#if s.http_status == null}
+						<span {...props} class="font-mono text-xs text-muted-foreground">—</span>
+					{:else}
+						{@const code = s.http_status}
+						<button
+							{...props}
+							type="button"
+							class="inline-flex items-center gap-1 font-mono text-xs hover:underline {httpStatusTextClass(
+								code
+							)}"
+							onclick={(e) => pivot(e, `status:${code}`)}
+						>
+							{#if AUTH_CODES.has(code)}
 								<Lock class="size-3" />
 							{:else if statusCls === 'info'}
 								<ArrowRight class="size-3" />
 							{:else}
 								<span class="size-1.5 rounded-full {STATUS_DOT[statusCls]}"></span>
 							{/if}
-							{s.http_status}
-						{/if}
-					</span>
+							{code}
+						</button>
+					{/if}
 				{/snippet}
 			</Tooltip.Trigger>
 			<Tooltip.Content>
 				{httpStatusReason(
 					s.http_status
 				)}{#if s.http_status != null && AUTH_CODES.has(s.http_status)}
-					· requires authentication{/if}
+					· requires authentication{/if}{#if s.http_status != null}
+					· Filter by status{/if}
 			</Tooltip.Content>
 		</Tooltip.Root>
 	</div>
@@ -600,12 +604,18 @@
 					<span class="text-xs text-muted-foreground">—</span>
 				{/if}
 				{#if s.asn}
-					<Hint text={s.asn_org ? `AS${s.asn} · ${s.asn_org}` : `AS${s.asn}`}>
+					{@const asn = s.asn}
+					<Hint text="{s.asn_org ? `AS${asn} · ${s.asn_org}` : `AS${asn}`} · Filter by network">
 						{#snippet child(props)}
-							<div {...props} class="mt-0.5 truncate text-2xs text-muted-foreground">
-								<span class="font-mono">AS{s.asn}</span>{#if s.asn_org}
+							<button
+								{...props}
+								type="button"
+								class="mt-0.5 max-w-full truncate text-left text-2xs text-muted-foreground hover:text-foreground"
+								onclick={(e) => pivot(e, filterToken('asn', String(asn)))}
+							>
+								<span class="font-mono">AS{asn}</span>{#if s.asn_org}
 									· {s.asn_org}{/if}
-							</div>
+							</button>
 						{/snippet}
 					</Hint>
 				{/if}

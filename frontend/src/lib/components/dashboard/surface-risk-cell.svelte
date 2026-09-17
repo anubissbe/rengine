@@ -5,6 +5,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { SEVERITY_FILL, SEVERITY_ORDER, severityLabel } from '$lib/config/vulnerabilities';
 	import { SURFACE_RISK_ROWS } from '$lib/config/dashboard';
+	import { ROUTES } from '$lib/config/routes';
+	import { SURFACE, SurfaceDimension } from '$lib/config/surface';
 	import type { DashboardSurfaceRisk } from '$lib/types/dashboard';
 
 	interface Props {
@@ -21,6 +23,18 @@
 		SEVERITY_ORDER.filter((s) => (data?.rows ?? []).some((r) => r.by_severity[s]))
 	);
 	let more = $derived(Math.max(0, (data?.scanned ?? 0) - rows.length));
+
+	const WEB = SURFACE[SurfaceDimension.WEB_ASSETS];
+	const VULNS = SURFACE[SurfaceDimension.VULNERABILITIES];
+	const liveHref = ROUTES.results(WEB.tab, undefined, { [WEB.queryParam]: 'is:live' });
+	const findingsHref = ROUTES.results(VULNS.tab);
+	const actionableHref = ROUTES.results(VULNS.tab, undefined, {
+		[VULNS.queryParam]: 'severity:[critical,high,medium]'
+	});
+	const actHref = ROUTES.results(VULNS.tab, undefined, {
+		[VULNS.queryParam]: 'is:exploitable or evidence:proven or severity:critical'
+	});
+	const STAT = 'flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5 hover:bg-muted';
 </script>
 
 <Cell
@@ -41,28 +55,31 @@
 	{/snippet}
 	{#if data}
 		<div class="grid grid-cols-3 gap-2">
-			<div class="flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5">
+			<a href={liveHref} class={STAT}>
 				<span class="text-lg leading-tight font-semibold tracking-tight tabular-nums">
 					{data.live.toLocaleString()}
 				</span>
 				<span class="truncate text-2xs text-muted-foreground">live web assets</span>
-			</div>
-			<div class="flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5">
+			</a>
+			<a href={findingsHref} class={STAT}>
 				<span class="text-lg leading-tight font-semibold tracking-tight tabular-nums">
 					{data.findings.toLocaleString()}
 				</span>
 				<span class="truncate text-2xs text-muted-foreground">open findings</span>
-			</div>
-			<div class="flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5">
-				<span
-					class="text-lg leading-tight font-semibold tracking-tight tabular-nums {data.actionable
+			</a>
+			<div class={STAT}>
+				<a
+					href={actionableHref}
+					class="text-lg leading-tight font-semibold tracking-tight tabular-nums hover:underline {data.actionable
 						? 'text-[var(--sev-critical-ink)]'
 						: ''}"
 				>
 					{data.actionable.toLocaleString()}
-				</span>
+				</a>
 				<span class="truncate text-2xs text-muted-foreground">
-					actionable · {data.act.toLocaleString()} act now
+					actionable · <a href={actHref} class="hover:underline"
+						>{data.act.toLocaleString()} act now</a
+					>
 				</span>
 			</div>
 		</div>

@@ -55,7 +55,7 @@
 	import { vulnerabilitiesApi } from '$lib/api/vulnerabilities';
 	import { vulnQuerySchema } from '$lib/stores/query-schema.svelte';
 	import { STORAGE_KEYS } from '$lib/config/storage-keys';
-	import { VULN_STATE_LABELS } from '$lib/config/vulnerabilities';
+	import { VULN_STATE_LABELS, VULN_STATE_KEYS } from '$lib/config/vulnerabilities';
 	import { appendToken, exactToken, type Facet } from '$lib/utilities/scan-insights';
 	import {
 		compileVulnQuery,
@@ -158,6 +158,8 @@
 	let groupReq = 0;
 
 	let expandedId = $state<string | null>(null);
+	let instancesSig = '';
+	let pendingVuln = initial.get('vuln');
 	let instances = $state<VulnerabilityRead[]>([]);
 	let instancesTotal = $state(0);
 	let instancesLoading = $state(false);
@@ -260,6 +262,13 @@
 				totalCapped = res.total_capped;
 				queryError = res.error;
 				if (expandedId && !issues.some((i) => i.template_id === expandedId)) collapse();
+				else if (expandedId && instancesSig !== JSON.stringify(query))
+					void loadInstances(expandedId, instanceLimit);
+				if (pendingVuln) {
+					const id = pendingVuln;
+					pendingVuln = null;
+					void openById(id);
+				}
 			} else {
 				const res = await vulnerabilitiesApi.search(projectId, scanId, filter);
 				if (my !== reqId) return;
@@ -267,6 +276,13 @@
 				total = res.total;
 				totalCapped = res.total_capped;
 				queryError = res.error;
+				if (pendingVuln) {
+					const id = pendingVuln;
+					pendingVuln = null;
+					const hit = items.find((v) => v.id === id);
+					if (hit) open(hit);
+					else void openById(id);
+				}
 				if (pendingSelect) {
 					selected = pendingSelect === 'first' ? (items[0] ?? null) : (items.at(-1) ?? null);
 					pendingSelect = null;
@@ -363,6 +379,7 @@
 
 	async function loadInstances(templateId: string, limit: number) {
 		const my = ++instanceReq;
+		instancesSig = JSON.stringify(query);
 		instancesLoading = true;
 		try {
 			const filter = compileVulnQuery({ ...query, templates: [templateId] }, 'host', 1, 0, limit);
@@ -473,6 +490,7 @@
 			set('vuln_group', groupBy || null);
 			set('vuln_view', view !== DEFAULT_VULN_VIEW ? view : null);
 			set('vuln_page', pageIndex > 0 ? String(pageIndex + 1) : null);
+			set('vuln', drawerOpen && selected ? selected.id : null);
 			set(
 				'vuln_sort',
 				sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir
@@ -492,6 +510,8 @@
 		void view;
 		void sort.key;
 		void sort.dir;
+		void drawerOpen;
+		void selected?.id;
 		if (!seen || !active) return;
 		untrack(syncUrl);
 	});
@@ -499,6 +519,13 @@
 	function open(v: VulnerabilityRead) {
 		selected = v;
 		drawerOpen = true;
+	}
+	async function openById(id: string) {
+		try {
+			open(await vulnerabilitiesApi.detail(projectId, scanId, id));
+		} catch {
+			toast.error('Finding not found in this scan');
+		}
 	}
 	function step(dir: -1 | 1) {
 		const next = selectedIndex + dir;
@@ -663,6 +690,10 @@
 			.querySelector(`[data-vuln-row-index="${cursor}"]`)
 			?.scrollIntoView({ block: 'nearest' });
 	}
+	const TRIAGE_KEYS: Record<string, string> = Object.fromEntries(
+		Object.entries(VULN_STATE_KEYS).map(([state, key]) => [key, state])
+	);
+
 	function onKey(e: KeyboardEvent) {
 		if (!active || e.metaKey || e.ctrlKey || e.altKey) return;
 		const t = e.target as HTMLElement | null;
@@ -673,7 +704,20 @@
 			searchRef?.focus();
 			return;
 		}
-		if (typing || drawerOpen || !rowCount) return;
+		if (typing) return;
+		const state = TRIAGE_KEYS[e.key];
+		const target = drawerOpen ? selected : isIssues ? null : (items[cursor] ?? null);
+		if (state && target) {
+			e.preventDefault();
+			void triage(target, state);
+			return;
+		}
+		if (e.key === 'x' && !drawerOpen && cursor >= 0) {
+			e.preventDefault();
+			toggleCheck(isIssues ? issues[cursor].template_id : items[cursor].id);
+			return;
+		}
+		if (drawerOpen || !rowCount) return;
 		if (e.key === 'j' || e.key === 'ArrowDown') {
 			e.preventDefault();
 			cursor = Math.min(cursor + 1, rowCount - 1);
@@ -784,11 +828,17 @@
 	function openRescanAllOptions() {
 		rescanOptionsFor = { selection: querySelection(), templates: [] };
 	}
+
+	let barH = $state(0);
+	let scrollRef = $state<HTMLElement | null>(null);
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-<div class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2">
+<div
+	class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2"
+	bind:clientHeight={barH}
+>
 	<QueryBar
 		bind:this={queryBar}
 		bind:ref={searchRef}
@@ -808,7 +858,7 @@
 	/>
 </div>
 
-<Card.Root class="gap-0 overflow-hidden rounded-t-none border-t-0 py-0">
+<Card.Root class="gap-0 overflow-clip rounded-t-none border-t-0 py-0">
 	<div class="flex items-center gap-3 border-b pr-3 pl-2">
 		<div class="min-w-0 flex-1">
 			<CountTabs
@@ -985,17 +1035,20 @@
 			</EmptyState>
 		{/if}
 	{:else if isIssues}
-		<ScrollArea orientation="horizontal">
-			<ListHeader
-				lead={ISSUE_LEAD_COLUMNS}
-				columns={ISSUE_COLUMNS}
-				{selectAllChecked}
-				selectAllLabel="Select all weaknesses on this page"
-				onSelectAll={toggleSelectAll}
-				sortKey={sort.key}
-				sortDir={sort.dir}
-				onSort={toggleSort}
-			/>
+		<ListHeader
+			sticky
+			top={barH}
+			follow={scrollRef}
+			lead={ISSUE_LEAD_COLUMNS}
+			columns={ISSUE_COLUMNS}
+			{selectAllChecked}
+			selectAllLabel="Select all weaknesses on this page"
+			onSelectAll={toggleSelectAll}
+			sortKey={sort.key}
+			sortDir={sort.dir}
+			onSort={toggleSort}
+		/>
+		<ScrollArea orientation="horizontal" bind:ref={scrollRef}>
 			<div class="divide-y divide-border/50 transition-opacity {loading ? 'opacity-60' : ''}">
 				{#each issues as issue, i (issue.template_id)}
 					<div>
@@ -1031,17 +1084,20 @@
 			</div>
 		</ScrollArea>
 	{:else}
-		<ScrollArea orientation="horizontal">
-			<ListHeader
-				lead={VULN_LEAD_COLUMNS}
-				columns={shownColumns}
-				{selectAllChecked}
-				selectAllLabel="Select all findings on this page"
-				onSelectAll={toggleSelectAll}
-				sortKey={sort.key}
-				sortDir={sort.dir}
-				onSort={toggleSort}
-			/>
+		<ListHeader
+			sticky
+			top={barH}
+			follow={scrollRef}
+			lead={VULN_LEAD_COLUMNS}
+			columns={shownColumns}
+			{selectAllChecked}
+			selectAllLabel="Select all findings on this page"
+			onSelectAll={toggleSelectAll}
+			sortKey={sort.key}
+			sortDir={sort.dir}
+			onSort={toggleSort}
+		/>
+		<ScrollArea orientation="horizontal" bind:ref={scrollRef}>
 			<div class="divide-y divide-border/50 transition-opacity {loading ? 'opacity-60' : ''}">
 				{#each items as v, i (v.id)}
 					<VulnRow

@@ -114,6 +114,7 @@ _WINDOW_DELTAS = {
     "12h": timedelta(hours=12),
     "24h": timedelta(days=1),
     "7d": timedelta(days=7),
+    "14d": timedelta(days=14),
     "30d": timedelta(days=30),
 }
 

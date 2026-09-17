@@ -92,6 +92,7 @@ export const SCAN_TIME_RANGES = [
 	{ key: 'all', label: 'All time' },
 	{ key: '24h', label: 'Last 24 hours' },
 	{ key: '7d', label: 'Last 7 days' },
+	{ key: '14d', label: 'Last 14 days' },
 	{ key: '30d', label: 'Last 30 days' }
 ] as const;
 export type ScanTimeRange = (typeof SCAN_TIME_RANGES)[number]['key'];

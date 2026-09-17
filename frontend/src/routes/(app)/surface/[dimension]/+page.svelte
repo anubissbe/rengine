@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import LaunchDialog from '$lib/components/scans/launch/launch-dialog.svelte';
@@ -18,7 +19,8 @@
 		FINDINGS_TABS,
 		SURFACE_ORDER,
 		SurfaceDimension,
-		type FindingsTab
+		type FindingsTab,
+		type ResultTab
 	} from '$lib/config/surface';
 	import { ROUTES, routeLabels } from '$lib/config/routes';
 
@@ -38,6 +40,12 @@
 		if (!id) return;
 		untrack(() => void surfaceStore.load(id));
 	});
+
+	function openTab(tab: ResultTab, filter?: string) {
+		const target = SURFACE_ORDER.find((s) => s.tab === tab);
+		if (!target) return;
+		void goto(ROUTES.surface(tab, filter ? { [target.queryParam]: filter } : undefined));
+	}
 
 	function afterLaunch() {
 		launchOpen = false;
@@ -79,7 +87,7 @@
 			{:else if spec.key === SurfaceDimension.IPS}
 				<IpsTable scanId="" projectWide {projectId} />
 			{:else if spec.key === SurfaceDimension.VULNERABILITIES}
-				<VulnerabilitiesTable scanId="" projectWide />
+				<VulnerabilitiesTable scanId="" projectWide onTab={openTab} />
 			{:else if spec.key === SurfaceDimension.SECRETS}
 				<SecretsTable scanId="" projectWide {projectId} />
 			{:else}

@@ -523,11 +523,17 @@
 	function openRescanAllOptions() {
 		rescanOptionsFor = querySelection();
 	}
+
+	let barH = $state(0);
+	let scrollRef = $state<HTMLElement | null>(null);
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-<div class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2">
+<div
+	class="z-20 bg-background md:sticky md:top-[var(--scan-tabs-h,0px)] md:pt-2"
+	bind:clientHeight={barH}
+>
 	<QueryBar
 		bind:this={queryBar}
 		bind:ref={searchRef}
@@ -547,7 +553,7 @@
 	/>
 </div>
 
-<Card.Root class="gap-0 overflow-hidden rounded-t-none border-t-0 py-0">
+<Card.Root class="gap-0 overflow-clip rounded-t-none border-t-0 py-0">
 	<div class="border-b px-2">
 		<CountTabs
 			tabs={SERVICE_CLASS_TABS}
@@ -680,17 +686,20 @@
 			/>
 		{/if}
 	{:else}
-		<ScrollArea orientation="horizontal">
-			<ListHeader
-				lead={SERVICE_LEAD_COLUMNS}
-				columns={shownColumns}
-				{selectAllChecked}
-				selectAllLabel="Select all services on this page"
-				onSelectAll={toggleSelectAll}
-				sortKey={sort.key}
-				sortDir={sort.dir}
-				onSort={toggleSort}
-			/>
+		<ListHeader
+			sticky
+			top={barH}
+			follow={scrollRef}
+			lead={SERVICE_LEAD_COLUMNS}
+			columns={shownColumns}
+			{selectAllChecked}
+			selectAllLabel="Select all services on this page"
+			onSelectAll={toggleSelectAll}
+			sortKey={sort.key}
+			sortDir={sort.dir}
+			onSort={toggleSort}
+		/>
+		<ScrollArea orientation="horizontal" bind:ref={scrollRef}>
 			<div class="divide-y divide-border/50 transition-opacity {loading ? 'opacity-60' : ''}">
 				{#each items as s, i (s.id)}
 					<ServiceRow

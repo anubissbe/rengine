@@ -9,7 +9,9 @@
 	import Terminal from '@lucide/svelte/icons/terminal';
 	import Trophy from '@lucide/svelte/icons/trophy';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { goto } from '$app/navigation';
 	import { Badge } from '$lib/components/ui/badge';
+	import { ROUTES } from '$lib/config/routes';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import CopyButton from '$lib/components/copy-button.svelte';
@@ -40,7 +42,9 @@
 		SCANNER_LABELS,
 		SEVERITY_FILL,
 		VULN_STATE_LABELS,
-		VulnState
+		VulnState,
+		Severity,
+		VULN_STATE_KEYS
 	} from '$lib/config/vulnerabilities';
 	import {
 		ACTIONS_BODY,
@@ -93,6 +97,9 @@
 	let asset = $derived(v.asset);
 	let ProtocolIcon = $derived(PROTOCOL_ICONS[v.protocol] ?? Globe);
 	let reviewed = $derived(v.state !== VulnState.OPEN);
+	let emphasised = $derived(
+		!reviewed && (v.severity === Severity.CRITICAL || v.severity === Severity.HIGH)
+	);
 	let likely = $derived((v.epss_score ?? 0) >= EPSS_HIGH);
 	const ROW_SIGNALS: string[] = [
 		ExploitSignal.RANSOM_PATH,
@@ -125,7 +132,7 @@
 </script>
 
 <div
-	class="group relative flex cursor-pointer items-start gap-3 px-4 transition-colors {pad} {tone}"
+	class="group relative isolate flex cursor-pointer items-start gap-3 px-4 transition-colors {pad} {tone}"
 	role="button"
 	tabindex={0}
 	data-vuln-row-index={index}
@@ -139,10 +146,17 @@
 	}}
 >
 	<span
-		class="absolute inset-y-0 left-0 w-[3px] {reviewed ? 'opacity-30' : ''}"
+		class="absolute inset-y-0 left-0 w-1 {reviewed ? 'opacity-30' : ''}"
 		style="background:{fill}"
 		aria-hidden="true"
 	></span>
+	{#if emphasised}
+		<span
+			class="pointer-events-none absolute inset-0 -z-10"
+			style="background:color-mix(in oklch, {fill} 6%, transparent)"
+			aria-hidden="true"
+		></span>
+	{/if}
 
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -394,21 +408,32 @@
 					{/if}
 					<div class="flex min-w-0 flex-wrap items-center gap-1">
 						{#if v.cve_ids.length}
-							<button
-								type="button"
-								class="flex h-5 items-center"
-								onclick={(e) => pivot(e, exactToken('cve', v.cve_ids[0]))}
-							>
-								<Badge
-									variant="outline"
-									class="px-1 font-mono text-2xs font-normal hover:bg-accent"
-								>
-									{v.cve_ids[0]}
-								</Badge>
-							</button>
+							<Hint text="Open the CVE page">
+								{#snippet child(props)}
+									<a
+										{...props}
+										href={ROUTES.cve(v.cve_ids[0])}
+										class="flex h-5 items-center"
+										onclick={stopProp}
+									>
+										<Badge
+											variant="outline"
+											class="px-1 font-mono text-2xs font-normal hover:bg-accent"
+										>
+											{v.cve_ids[0]}
+										</Badge>
+									</a>
+								{/snippet}
+							</Hint>
 							{#if v.cve_ids.length > 1}
-								<span class="text-2xs leading-5 text-muted-foreground">+{v.cve_ids.length - 1}</span
-								>
+								<OverflowPopover
+									class="shrink-0"
+									items={v.cve_ids}
+									shown={1}
+									label="CVEs"
+									mono
+									onSelect={(c) => goto(ROUTES.cve(c))}
+								/>
 							{/if}
 						{/if}
 						{#if cvss !== null}
@@ -557,7 +582,10 @@
 					<DropdownMenu.Label>Review</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup value={v.state} onValueChange={(state) => onTriage(v, state)}>
 						{#each Object.entries(VULN_STATE_LABELS) as [value, label] (value)}
-							<DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
+							<DropdownMenu.RadioItem {value}>
+								{label}
+								<DropdownMenu.Shortcut>{VULN_STATE_KEYS[value]}</DropdownMenu.Shortcut>
+							</DropdownMenu.RadioItem>
 						{/each}
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Content>

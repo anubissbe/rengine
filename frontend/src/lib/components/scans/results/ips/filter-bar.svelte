@@ -6,6 +6,7 @@
 	import type { SortOption, TableColumn } from '../table/columns';
 	import type { QueryGroupSpec } from '$lib/types/asset-query';
 	import type { IpFacetSet, IpQuery } from '$lib/utilities/ip-groups';
+	import { appendToken, tokenize } from '$lib/utilities/scan-insights';
 
 	interface Props {
 		query: IpQuery;
@@ -53,7 +54,9 @@
 		exportFilters = {}
 	}: Props = $props();
 
+	const NEW_TOKEN = 'is:new';
 	const QUICK = [
+		{ value: 'new', label: 'New' },
 		{ value: 'sensitive', label: 'Sensitive' },
 		{ value: 'hosted', label: 'Has hosts' },
 		{ value: 'nocdn', label: 'No CDN' },
@@ -62,6 +65,7 @@
 
 	let quick = $derived(
 		[
+			tokenize(query.search).includes(NEW_TOKEN) && 'new',
 			query.sensitiveOnly && 'sensitive',
 			query.hostedOnly && 'hosted',
 			query.cdn === 'no' && 'nocdn',
@@ -70,8 +74,14 @@
 	);
 
 	function setQuick(values: string[]) {
+		const search = values.includes('new')
+			? appendToken(query.search, NEW_TOKEN)
+			: tokenize(query.search)
+					.filter((t) => t !== NEW_TOKEN)
+					.join(' ');
 		onQuery({
 			...query,
+			search,
 			sensitiveOnly: values.includes('sensitive'),
 			hostedOnly: values.includes('hosted'),
 			cdn: values.includes('nocdn') ? 'no' : query.cdn === 'no' ? 'any' : query.cdn,

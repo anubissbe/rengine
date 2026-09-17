@@ -317,7 +317,7 @@
 						</Tooltip.Root>
 					{/if}
 					<div class="ml-auto flex items-center gap-1">
-						{#if total > 1}
+						{#if total > 1 && index >= 0}
 							<span class="text-xs text-muted-foreground tabular-nums">
 								{position.toLocaleString()} / {total.toLocaleString()}
 							</span>
