@@ -17,6 +17,7 @@ from shared.definitions.changes import (
     CHANGE_FEED_LIMIT,
     CHANGE_WINDOWS,
     DEFAULT_CHANGE_WINDOW,
+    EVENT_TONES,
     KIND_LABELS,
     KIND_ORDER,
     SOURCE_LABELS,
@@ -24,6 +25,7 @@ from shared.definitions.changes import (
     ChangeKind,
     ChangeTone,
     change_kind_of_event,
+    event_kinds_for,
     mark_key,
 )
 from shared.definitions.watch import ARRIVED_STATES, CT_SOURCE
@@ -437,7 +439,7 @@ class ChangeFeedService:
             await self.session.execute(
                 select(BountyEventRow, BountyProgram.source)
                 .join(BountyProgram, BountyProgram.id == BountyEventRow.program_id)
-                .where(*conds)
+                .where(*conds, BountyEventRow.kind.in_(list(event_kinds_for(kinds))))
                 .order_by(BountyEventRow.created_at.desc())
                 .limit(limit + 1)
             )
@@ -445,8 +447,6 @@ class ChangeFeedService:
         items = []
         for e, source in rows:
             kind = change_kind_of_event(e.kind)
-            if kind not in kinds:
-                continue
             spec = event_spec(e.kind)
             scoped = kind != ChangeKind.PROGRAM.value
             items.append(
@@ -461,7 +461,7 @@ class ChangeFeedService:
                     detail=(e.asset_type if scoped else e.detail) or None,
                     source=source,
                     source_label=_source_label(source),
-                    tone=spec.tone,
+                    tone=EVENT_TONES.get(spec.tone, ChangeTone.NEUTRAL.value),
                     platform=e.platform,
                     handle=e.handle,
                     program_name=e.program_name,

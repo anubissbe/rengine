@@ -37,13 +37,25 @@
 	$effect(() => {
 		const viewport = follow?.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]');
 		const el = wrap;
-		if (!viewport || !el) return;
+		const inner = el?.firstElementChild as HTMLElement | null;
+		if (!viewport || !el || !inner) return;
 		const sync = () => {
 			el.scrollLeft = viewport.scrollLeft;
 		};
-		sync();
+		const fit = () => {
+			inner.style.width = `${Math.max(viewport.scrollWidth, viewport.clientWidth)}px`;
+			sync();
+		};
+		fit();
+		const ro = new ResizeObserver(fit);
+		ro.observe(viewport);
+		if (viewport.firstElementChild) ro.observe(viewport.firstElementChild);
 		viewport.addEventListener('scroll', sync, { passive: true });
-		return () => viewport.removeEventListener('scroll', sync);
+		return () => {
+			ro.disconnect();
+			viewport.removeEventListener('scroll', sync);
+			inner.style.width = '';
+		};
 	});
 </script>
 

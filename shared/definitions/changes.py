@@ -60,12 +60,29 @@ CHANGE_WINDOWS: dict[str, timedelta] = {
 DEFAULT_CHANGE_WINDOW = "7d"
 CHANGE_FEED_LIMIT = 300
 
+EVENT_TONES: dict[str, str] = {
+    "info": ChangeTone.NEW.value,
+    "warning": ChangeTone.HOT.value,
+    "muted": ChangeTone.NEUTRAL.value,
+}
+
 SCOPE_IN_EVENTS: frozenset[str] = frozenset(
     {BountyEvent.SCOPE_ADDED.value, BountyEvent.CAME_INTO_SCOPE.value}
 )
 SCOPE_OUT_EVENTS: frozenset[str] = frozenset(
     {BountyEvent.SCOPE_REMOVED.value, BountyEvent.WENT_OUT_OF_SCOPE.value}
 )
+
+
+def event_kinds_for(kinds: set[str]) -> set[str]:
+    out: set[str] = set()
+    if ChangeKind.SCOPE_ADDED.value in kinds:
+        out |= SCOPE_IN_EVENTS
+    if ChangeKind.SCOPE_REMOVED.value in kinds:
+        out |= SCOPE_OUT_EVENTS
+    if ChangeKind.PROGRAM.value in kinds:
+        out |= {e.value for e in BountyEvent} - SCOPE_IN_EVENTS - SCOPE_OUT_EVENTS
+    return out
 
 
 def change_kind_of_event(kind: str) -> str:

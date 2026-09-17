@@ -4,7 +4,7 @@
 	import SurfaceRiskDialog from './surface-risk-dialog.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { SEVERITY_FILL, SEVERITY_ORDER, severityLabel } from '$lib/config/vulnerabilities';
-	import { SURFACE_RISK_ROWS } from '$lib/config/dashboard';
+	import { ACT_QUERY, SURFACE_RISK_ROWS } from '$lib/config/dashboard';
 	import { ROUTES } from '$lib/config/routes';
 	import { SURFACE, SurfaceDimension } from '$lib/config/surface';
 	import type { DashboardSurfaceRisk } from '$lib/types/dashboard';
@@ -31,9 +31,7 @@
 	const actionableHref = ROUTES.results(VULNS.tab, undefined, {
 		[VULNS.queryParam]: 'severity:[critical,high,medium]'
 	});
-	const actHref = ROUTES.results(VULNS.tab, undefined, {
-		[VULNS.queryParam]: 'is:exploitable or evidence:proven or severity:critical'
-	});
+	const actHref = ROUTES.results(VULNS.tab, undefined, { [VULNS.queryParam]: ACT_QUERY });
 	const STAT = 'flex min-w-0 flex-col rounded-md bg-muted/60 px-2.5 py-1.5';
 	const STAT_LINK = `${STAT} hover:bg-muted`;
 </script>

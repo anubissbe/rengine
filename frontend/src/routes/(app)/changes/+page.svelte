@@ -28,6 +28,7 @@
 		type ChangeWindow
 	} from '$lib/config/changes';
 	import { SELECT_NONE } from '$lib/constants';
+	import { STORAGE_KEYS } from '$lib/config/storage-keys';
 	import { formatShortDate } from '$lib/utilities/dates';
 	import type { ChangeFeed } from '$lib/types/changes';
 
@@ -63,8 +64,34 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let sinceAt = $state<string | null>(null);
+	let fallbackWindow = $state<string | null>(null);
 	let markedFor = '';
 	let reqId = 0;
+
+	interface Visit {
+		projectId: string;
+		since: string | null;
+		window: string | null;
+		at: number;
+	}
+	const VISIT_TTL_MS = 12 * 60 * 60 * 1000;
+
+	function readVisit(id: string): Visit | null {
+		try {
+			const raw = sessionStorage.getItem(STORAGE_KEYS.changesVisit);
+			const v = raw ? (JSON.parse(raw) as Visit) : null;
+			return v && v.projectId === id && Date.now() - v.at < VISIT_TTL_MS ? v : null;
+		} catch {
+			return null;
+		}
+	}
+	function writeVisit(v: Visit) {
+		try {
+			sessionStorage.setItem(STORAGE_KEYS.changesVisit, JSON.stringify(v));
+		} catch {
+			// ignore
+		}
+	}
 
 	let projectId = $derived(projectsStore.activeProject?.id ?? '');
 	let projectSlug = $derived(projectsStore.activeProject?.slug ?? '');
@@ -132,7 +159,7 @@
 		try {
 			const res = await changesApi.feed(projectId, {
 				since: mode === 'since' ? (sinceAt ?? undefined) : undefined,
-				window: mode === 'timeline' ? range : undefined,
+				window: mode === 'timeline' ? range : (fallbackWindow ?? undefined),
 				target_id: targetId || undefined,
 				platform: platform || undefined,
 				handle: handle || undefined,
@@ -141,9 +168,11 @@
 			if (my !== reqId) return;
 			feed = res;
 			if (mode === 'since') {
-				sinceAt = res.since;
+				if (res.basis === ChangeBasis.MARK) sinceAt = res.since;
+				else fallbackWindow = res.window;
 				if (markedFor !== projectId) {
 					markedFor = projectId;
+					writeVisit({ projectId, since: sinceAt, window: fallbackWindow, at: Date.now() });
 					void changesApi.markSeen(projectId).catch(() => {});
 				}
 			}
@@ -155,14 +184,23 @@
 		}
 	}
 
+	let loadedFor = '';
 	$effect(() => {
-		void projectId;
+		const id = projectId;
 		void mode;
 		void range;
 		void targetId;
 		void program;
 		void kind;
 		untrack(() => {
+			if (id && loadedFor !== id) {
+				loadedFor = id;
+				const visit = readVisit(id);
+				sinceAt = visit?.since ?? null;
+				fallbackWindow = visit?.window ?? null;
+				if (visit) markedFor = id;
+				feed = null;
+			}
 			syncUrl();
 			void load();
 		});
@@ -179,9 +217,7 @@
 	});
 
 	function setMode(next: ChangeMode) {
-		if (next === mode) return;
-		if (next === 'since') sinceAt = null;
-		mode = next;
+		if (next !== mode) mode = next;
 	}
 </script>
 

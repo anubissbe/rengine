@@ -4,6 +4,8 @@ export enum QueueTier {
 	Attend = 'attend',
 	Track = 'track'
 }
+export const TIER_ACT_EPSS = 0.088;
+export const ACT_QUERY = `is:kev or is:ransomware or evidence:proven or epss:>=${TIER_ACT_EPSS} or severity:critical`;
 export const TIER_ORDER: QueueTier[] = [QueueTier.Act, QueueTier.Attend, QueueTier.Track];
 export const TIER_LABELS: Record<QueueTier, string> = {
 	[QueueTier.Act]: 'Act',

@@ -698,7 +698,11 @@
 		if (!active || e.metaKey || e.ctrlKey || e.altKey) return;
 		const t = e.target as HTMLElement | null;
 		const typing =
-			!!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+			!!t &&
+			(t.tagName === 'INPUT' ||
+				t.tagName === 'TEXTAREA' ||
+				t.isContentEditable ||
+				!!t.closest('[role=listbox], [role=menu], [role=combobox], [role=dialog] select'));
 		if (e.key === '/' && !typing) {
 			e.preventDefault();
 			searchRef?.focus();
@@ -712,9 +716,10 @@
 			void triage(target, state);
 			return;
 		}
-		if (e.key === 'x' && !drawerOpen && cursor >= 0) {
+		if (e.key === 'x' && !drawerOpen) {
 			e.preventDefault();
-			toggleCheck(isIssues ? issues[cursor].template_id : items[cursor].id);
+			const id = isIssues ? issues[cursor]?.template_id : items[cursor]?.id;
+			if (id) toggleCheck(id);
 			return;
 		}
 		if (drawerOpen || !rowCount) return;
