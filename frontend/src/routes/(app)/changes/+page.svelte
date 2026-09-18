@@ -9,6 +9,7 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import CountTabs from '$lib/components/count-tabs.svelte';
 	import ChangeList from '$lib/components/changes/change-list.svelte';
+	import ActivityGrid from '$lib/components/changes/activity-grid.svelte';
 	import { changesApi } from '$lib/api/changes';
 	import { projectsStore } from '$lib/stores/projects.svelte';
 	import { targetsStore } from '$lib/stores/targets.svelte';
@@ -24,6 +25,7 @@
 		DEFAULT_CHANGE_WINDOW,
 		KIND_LABELS,
 		KIND_ORDER,
+		type ChangeKindKey,
 		type ChangeMode,
 		type ChangeWindow
 	} from '$lib/config/changes';
@@ -97,6 +99,13 @@
 	let projectSlug = $derived(projectsStore.activeProject?.slug ?? '');
 	let bounty = $derived(capabilitiesStore.has(Capability.BOUNTY_PROGRAMS));
 	let kinds = $derived(KIND_ORDER.filter((k) => bounty || !BOUNTY_KINDS.has(k)));
+	let pickedDay = $state<string | null>(null);
+
+	function pickDay(date: string) {
+		pickedDay = date;
+		const anchor = document.querySelector<HTMLElement>(`[data-day="${date}"]`);
+		anchor?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+	}
 	let targetLabel = $derived(
 		targetsStore.targets.find((t) => t.id === targetId)?.target_value ??
 			feed?.items.find((i) => i.target_id === targetId)?.target_value ??
@@ -315,6 +324,17 @@
 			</Button>
 		{/if}
 	</div>
+
+	{#if feed?.daily.length}
+		<div class="overflow-x-auto rounded-xl border bg-card px-4 py-3">
+			<ActivityGrid
+				days={feed.daily}
+				kinds={kind === ALL ? kinds : [kind as ChangeKindKey]}
+				selected={pickedDay}
+				onPick={pickDay}
+			/>
+		</div>
+	{/if}
 
 	<div class="overflow-clip rounded-xl border bg-card">
 		<CountTabs

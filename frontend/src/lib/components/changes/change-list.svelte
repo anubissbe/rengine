@@ -32,34 +32,43 @@
 	}
 
 	const fmtTime = (iso: string) =>
-		new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-	const dayLabel = (d: Date) => {
-		const today = new Date();
-		if (d.toDateString() === today.toDateString()) return 'Today';
-		const yesterday = new Date(today.getTime() - 86_400_000);
-		if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-		return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+		new Date(iso).toLocaleTimeString('en-US', {
+			hour: 'numeric',
+			minute: '2-digit',
+			timeZone: 'UTC'
+		});
+	const dayKey = (iso: string) => iso.slice(0, 10);
+	const dayLabel = (key: string) => {
+		const today = new Date().toISOString().slice(0, 10);
+		if (key === today) return 'Today';
+		const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+		if (key === yesterday) return 'Yesterday';
+		return new Date(`${key}T12:00:00Z`).toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			timeZone: 'UTC'
+		});
 	};
 
 	let groups = $derived.by<DayGroup[]>(() => {
 		const out: DayGroup[] = [];
 		for (const item of items) {
-			const d = new Date(item.at);
-			const key = d.toDateString();
+			const key = dayKey(item.at);
 			const last = out.at(-1);
 			if (last && last.key === key) last.items.push(item);
-			else out.push({ key, label: dayLabel(d), items: [item] });
+			else out.push({ key, label: dayLabel(key), items: [item] });
 		}
 		return out;
 	});
 
 	function href(item: ChangeItem): string | null {
 		switch (item.kind) {
-			case ChangeKind.WEB_ASSET:
+			case ChangeKind.SCANNED_ASSET:
 				return item.scan_id
 					? ROUTES.scanTab(item.scan_id, 'web-assets', { q: exactToken('host', item.value) })
 					: null;
-			case ChangeKind.HOST:
+			case ChangeKind.WATCH_HOST:
 				return item.scan_id
 					? ROUTES.scan(item.scan_id)
 					: item.watch_id
@@ -94,7 +103,10 @@
 {:else}
 	<div class="transition-opacity {loading ? 'opacity-60' : ''}">
 		{#each groups as group (group.key)}
-			<div class="sticky top-0 z-10 flex items-center gap-2 bg-background/95 py-1.5 backdrop-blur">
+			<div
+				data-day={group.key}
+				class="sticky top-0 z-10 flex scroll-mt-24 items-center gap-2 bg-background/95 py-1.5 backdrop-blur"
+			>
 				<span class="text-2xs font-semibold tracking-[0.1em] text-muted-foreground/80 uppercase">
 					{group.label}
 				</span>

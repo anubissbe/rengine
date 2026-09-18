@@ -27,12 +27,18 @@ class ChangeItem(BaseModel):
     program_name: str | None = None
 
 
+class ChangeDay(BaseModel):
+    date: str
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
 class ChangeFeed(BaseModel):
     since: datetime
     basis: str
     marked_at: datetime | None = None
     window: str | None = None
     counts: dict[str, int] = Field(default_factory=dict)
+    daily: list[ChangeDay] = Field(default_factory=list)
     items: list[ChangeItem] = Field(default_factory=list)
     truncated: bool = False
 

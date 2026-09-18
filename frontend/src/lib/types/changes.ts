@@ -17,12 +17,18 @@ export interface ChangeItem {
 	program_name: string | null;
 }
 
+export interface ChangeDay {
+	date: string;
+	counts: Record<string, number>;
+}
+
 export interface ChangeFeed {
 	since: string;
 	basis: string;
 	marked_at: string | null;
 	window: string | null;
 	counts: Record<string, number>;
+	daily: ChangeDay[];
 	items: ChangeItem[];
 	truncated: boolean;
 }

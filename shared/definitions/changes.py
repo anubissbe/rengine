@@ -1,4 +1,4 @@
-"""What the project change feed reports."""
+"""What is new to hunt: surface the world added, never what the operator did."""
 
 from __future__ import annotations
 
@@ -9,24 +9,31 @@ from shared.definitions.bounty_programs import BountyEvent
 
 
 class ChangeKind(StrEnum):
-    WEB_ASSET = "web_asset"
-    HOST = "host"
-    SCOPE_ADDED = "scope_added"
-    SCOPE_REMOVED = "scope_removed"
+    SCANNED_ASSET = "scanned_asset"
+    SCOPE_ASSET = "scope_asset"
     PROGRAM = "program"
+    WATCH_HOST = "watch_host"
     TARGET = "target"
 
 
 KIND_ORDER: tuple[str, ...] = tuple(k.value for k in ChangeKind)
 
 KIND_LABELS: dict[str, str] = {
-    ChangeKind.WEB_ASSET.value: "New web asset",
-    ChangeKind.HOST.value: "New in-scope host",
-    ChangeKind.SCOPE_ADDED.value: "Came into scope",
-    ChangeKind.SCOPE_REMOVED.value: "Left scope",
-    ChangeKind.PROGRAM.value: "Program update",
+    ChangeKind.SCANNED_ASSET.value: "New scanned asset",
+    ChangeKind.SCOPE_ASSET.value: "New in-scope asset",
+    ChangeKind.PROGRAM.value: "New program",
+    ChangeKind.WATCH_HOST.value: "New watched host",
     ChangeKind.TARGET.value: "New target",
 }
+
+BOUNTY_KINDS: frozenset[str] = frozenset(
+    {
+        ChangeKind.SCOPE_ASSET.value,
+        ChangeKind.PROGRAM.value,
+        ChangeKind.WATCH_HOST.value,
+        ChangeKind.TARGET.value,
+    }
+)
 
 
 class ChangeBasis(StrEnum):
@@ -43,21 +50,17 @@ class ChangeTone(StrEnum):
 SOURCE_LABELS: dict[str, str] = {
     "ct_log": "Certificate log",
     "watch": "Program watch",
-    "user": "Manual",
+    "scope": "Program scope",
     "api": "Platform API",
     "feed": "Public feed",
-    "imported": "Imported",
-    "target": "Target seed",
 }
 
 CHANGE_WINDOWS: dict[str, timedelta] = {
-    "24h": timedelta(days=1),
     "7d": timedelta(days=7),
-    "14d": timedelta(days=14),
     "30d": timedelta(days=30),
     "90d": timedelta(days=90),
 }
-DEFAULT_CHANGE_WINDOW = "7d"
+DEFAULT_CHANGE_WINDOW = "30d"
 CHANGE_FEED_LIMIT = 300
 
 EVENT_TONES: dict[str, str] = {
@@ -66,31 +69,35 @@ EVENT_TONES: dict[str, str] = {
     "muted": ChangeTone.NEUTRAL.value,
 }
 
-SCOPE_IN_EVENTS: frozenset[str] = frozenset(
+SCOPE_EVENTS: frozenset[str] = frozenset(
     {BountyEvent.SCOPE_ADDED.value, BountyEvent.CAME_INTO_SCOPE.value}
 )
-SCOPE_OUT_EVENTS: frozenset[str] = frozenset(
-    {BountyEvent.SCOPE_REMOVED.value, BountyEvent.WENT_OUT_OF_SCOPE.value}
+PROGRAM_EVENTS: frozenset[str] = frozenset(
+    {
+        BountyEvent.PROGRAM_ADDED.value,
+        BountyEvent.PROGRAM_WENT_PUBLIC.value,
+        BountyEvent.SUBMISSIONS_OPENED.value,
+        BountyEvent.BOUNTIES_STARTED.value,
+    }
 )
+NEW_EVENTS: frozenset[str] = SCOPE_EVENTS | PROGRAM_EVENTS
 
 
 def event_kinds_for(kinds: set[str]) -> set[str]:
     out: set[str] = set()
-    if ChangeKind.SCOPE_ADDED.value in kinds:
-        out |= SCOPE_IN_EVENTS
-    if ChangeKind.SCOPE_REMOVED.value in kinds:
-        out |= SCOPE_OUT_EVENTS
+    if ChangeKind.SCOPE_ASSET.value in kinds:
+        out |= SCOPE_EVENTS
     if ChangeKind.PROGRAM.value in kinds:
-        out |= {e.value for e in BountyEvent} - SCOPE_IN_EVENTS - SCOPE_OUT_EVENTS
+        out |= PROGRAM_EVENTS
     return out
 
 
-def change_kind_of_event(kind: str) -> str:
-    if kind in SCOPE_IN_EVENTS:
-        return ChangeKind.SCOPE_ADDED.value
-    if kind in SCOPE_OUT_EVENTS:
-        return ChangeKind.SCOPE_REMOVED.value
-    return ChangeKind.PROGRAM.value
+def change_kind_of_event(kind: str) -> str | None:
+    if kind in SCOPE_EVENTS:
+        return ChangeKind.SCOPE_ASSET.value
+    if kind in PROGRAM_EVENTS:
+        return ChangeKind.PROGRAM.value
+    return None
 
 
 def mark_key(project_id) -> str:
