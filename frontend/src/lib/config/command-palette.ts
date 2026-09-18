@@ -2,7 +2,7 @@ import Ban from '@lucide/svelte/icons/ban';
 import Cog from '@lucide/svelte/icons/cog';
 import Crosshair from '@lucide/svelte/icons/crosshair';
 import FolderOpen from '@lucide/svelte/icons/folder-open';
-import History from '@lucide/svelte/icons/history';
+import Sparkles from '@lucide/svelte/icons/sparkles';
 import GitCompareArrows from '@lucide/svelte/icons/git-compare-arrows';
 import Layers from '@lucide/svelte/icons/layers';
 import Link2 from '@lucide/svelte/icons/link-2';
@@ -319,11 +319,11 @@ function destinations(): Destination[] {
 			keywords: 'burp proxy browsing'
 		},
 		{
-			id: 'page:changes',
-			label: routeLabels.changes,
-			href: ROUTES.changes(),
-			icon: History,
-			keywords: 'new since last visit timeline what changed'
+			id: 'page:whats-new',
+			label: routeLabels['whats-new'],
+			href: ROUTES.whatsNew(),
+			icon: Sparkles,
+			keywords: 'new changes since caught up what changed'
 		},
 		{
 			id: 'page:bounty-hub',

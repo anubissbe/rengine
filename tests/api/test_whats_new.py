@@ -1,0 +1,438 @@
+from __future__ import annotations
+
+import uuid
+from datetime import timedelta
+
+import pytest
+from fastapi import HTTPException
+
+from app.api.v1.whats_new import whats_new
+from app.services.whats_new import WhatsNewService
+from shared.definitions.bounty_programs import BountyEvent
+from shared.definitions.watch import CT_SOURCE, WatchHostState
+from shared.definitions.whats_new import Fact, NewBasis, NewKind, ProgramRing
+from shared.enums.target import TargetType
+from shared.models.bounty_program import BountyEventRow, BountyProgram, BountyScope
+from shared.models.watch import ProgramWatch, WatchHost
+
+pytestmark = pytest.mark.api
+
+
+def _program(handle: str, name: str) -> BountyProgram:
+    return BountyProgram(
+        platform="hackerone",
+        handle=handle,
+        name=name,
+        program_state="public",
+        submission_state="open",
+    )
+
+
+def _service(estate) -> WhatsNewService:
+    return WhatsNewService(estate.session)
+
+
+def _sections(out, kind: str):
+    return [s for g in out.groups for s in g.sections if s.kind == kind]
+
+
+def _values(out, kind: str) -> list[str]:
+    return [i.value for s in _sections(out, kind) for i in s.items]
+
+
+async def test_a_host_the_previous_run_lacked_is_new(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts("older", ["a.example.com"], at=now - timedelta(days=2))
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts(
+        "fresh",
+        ["a.example.com", "b.example.com"],
+        at=now,
+        sources=["subfinder"],
+        status=200,
+        title="Hello",
+    )
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert _values(out, NewKind.WEB_ASSET.value) == ["b.example.com"]
+    row = _sections(out, NewKind.WEB_ASSET.value)[0].items[0]
+    assert row.source == "subfinder"
+    assert row.status == 200
+    assert row.query == "host=b.example.com"
+    assert out.counts[NewKind.WEB_ASSET.value] == 1
+    assert out.basis == NewBasis.MARK.value
+    group = out.groups[0]
+    assert group.scan_id == estate.scans["fresh"]
+    assert group.previous_scan_id == estate.scans["older"]
+    assert group.subject.target_value == "example.com"
+    today = now.date().isoformat()
+    assert [d.counts for d in out.daily if d.date == today] == [
+        {NewKind.WEB_ASSET.value: 1}
+    ]
+
+
+async def test_a_first_run_reports_nothing(estate, now):
+    await estate.scan("example.com", "first", at=now)
+    await estate.hosts("first", ["a.example.com", "b.example.com"], at=now)
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.groups == []
+    assert sum(out.counts.values()) == 0
+    assert out.first_runs == 1
+
+
+async def test_services_and_findings_carry_their_facts(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.ports(
+        "older", [("10.0.0.1", 443, "https")], at=now - timedelta(days=2)
+    )
+    await estate.vulns("older", [("old-check", "low")], at=now - timedelta(days=2))
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.ports(
+        "fresh", [("10.0.0.1", 443, "https"), ("10.0.0.1", 3389, "rdp")], at=now
+    )
+    await estate.vulns(
+        "fresh", [("old-check", "low"), ("solr-rce", "critical")], at=now, kev=True
+    )
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert _values(out, NewKind.SERVICE.value) == ["10.0.0.1:3389"]
+    assert out.facts[NewKind.SERVICE.value] == {Fact.SENSITIVE.value: 1}
+    assert _values(out, NewKind.FINDING.value) == ["Solr Rce"]
+    assert out.facts[NewKind.FINDING.value] == {
+        Fact.CRITICAL.value: 1,
+        Fact.KEV.value: 1,
+    }
+    assert len(out.groups) == 1
+    assert out.groups[0].counts == {
+        NewKind.SERVICE.value: 1,
+        NewKind.FINDING.value: 1,
+    }
+
+
+async def test_a_retired_host_is_a_count_on_the_run(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts(
+        "older", ["a.example.com", "b.example.com"], at=now - timedelta(days=2)
+    )
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts("fresh", ["a.example.com"], at=now)
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.counts[NewKind.RETIRED.value] == 1
+    assert out.groups[0].retired == 1
+    assert out.groups[0].sections == []
+
+
+async def test_a_day_range_bounds_the_feed(estate, now):
+    old = now - timedelta(days=5)
+    await estate.scan("example.com", "base", at=now - timedelta(days=9))
+    await estate.hosts("base", ["a.example.com"], at=now - timedelta(days=9))
+    await estate.scan("example.com", "mid", at=old)
+    await estate.hosts("mid", ["b.example.com"], at=old)
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts("fresh", ["c.example.com"], at=now)
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, day_from=old.date(), day_to=old.date()
+    )
+
+    assert out.basis == NewBasis.DAYS.value
+    assert _values(out, NewKind.WEB_ASSET.value) == ["b.example.com"]
+    days = {d.date: d.counts for d in out.daily}
+    assert days[old.date().isoformat()] == {
+        NewKind.WEB_ASSET.value: 1,
+        NewKind.RETIRED.value: 1,
+    }
+    assert days[now.date().isoformat()] == {
+        NewKind.WEB_ASSET.value: 1,
+        NewKind.RETIRED.value: 1,
+    }
+
+
+async def test_text_filter_narrows_rows_and_counts(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts("older", ["a.example.com"], at=now - timedelta(days=2))
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts("fresh", ["api.example.com", "www.example.com"], at=now)
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1), q="api"
+    )
+
+    assert _values(out, NewKind.WEB_ASSET.value) == ["api.example.com"]
+    assert out.counts[NewKind.WEB_ASSET.value] == 1
+
+
+async def test_a_kind_filter_leaves_no_empty_run(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts(
+        "older", ["a.example.com", "b.example.com"], at=now - timedelta(days=2)
+    )
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts("fresh", ["a.example.com", "c.example.com"], at=now)
+
+    out = await _service(estate).feed(
+        estate.project_id,
+        estate.user_id,
+        since=now - timedelta(hours=1),
+        kinds={NewKind.SCOPE.value},
+    )
+
+    assert out.groups == []
+    assert out.counts[NewKind.WEB_ASSET.value] == 1
+    assert out.counts[NewKind.RETIRED.value] == 1
+
+
+async def test_a_hand_added_target_is_not_new(estate, now):
+    await estate.target("example.com")
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.counts[NewKind.TARGET.value] == 0
+
+
+async def test_a_certificate_host_is_reported_by_the_watch_alone(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts("older", ["a.example.com"], at=now - timedelta(days=2))
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts("fresh", ["ct.example.com"], at=now, sources=[CT_SOURCE])
+    program = _program("acme", "Acme")
+    estate.session.add(program)
+    await estate.session.flush()
+    watch = ProgramWatch(
+        project_id=estate.project_id,
+        program_id=program.id,
+        created_by=estate.user_id,
+    )
+    estate.session.add(watch)
+    await estate.session.flush()
+    estate.session.add(
+        WatchHost(
+            watch_id=watch.id,
+            project_id=estate.project_id,
+            target_id=estate.targets["example.com"],
+            name="ct.example.com",
+            state=WatchHostState.ALERTED.value,
+            first_seen_at=now,
+            status_code=200,
+            title="Hello",
+        )
+    )
+    await estate.session.flush()
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.counts[NewKind.WEB_ASSET.value] == 0
+    assert out.counts[NewKind.CERT_HOST.value] == 1
+    assert out.facts[NewKind.CERT_HOST.value] == {Fact.ANSWERING.value: 1}
+    group = next(g for g in out.groups if g.subject.kind == "program")
+    assert group.subject.watched is True
+    assert group.subject.watch_id == watch.id
+    row = group.sections[0].items[0]
+    assert row.host_id is not None
+    assert row.watch_id == watch.id
+
+
+async def test_scope_events_count_for_engaged_programs_only(estate, now):
+    mine = _program("acme", "Acme")
+    other = _program("globex", "Globex")
+    estate.session.add_all([mine, other])
+    await estate.session.flush()
+    estate.session.add(
+        ProgramWatch(
+            project_id=estate.project_id,
+            program_id=mine.id,
+            created_by=estate.user_id,
+        )
+    )
+    estate.session.add_all(
+        [
+            BountyScope(
+                program_id=mine.id,
+                asset_type="WILDCARD",
+                asset_identifier="*.acme.com",
+                scope_state="in_scope",
+                target_value="acme.com",
+                target_type=TargetType.DOMAIN,
+            ),
+            BountyScope(
+                program_id=other.id,
+                asset_type="DOMAIN",
+                asset_identifier="app.globex.com",
+                scope_state="in_scope",
+                target_value="app.globex.com",
+                target_type=TargetType.DOMAIN,
+            ),
+        ]
+    )
+    for program, identifier in ((mine, "*.acme.com"), (other, "app.globex.com")):
+        estate.session.add(
+            BountyEventRow(
+                platform=program.platform,
+                program_id=program.id,
+                handle=program.handle,
+                program_name=program.name,
+                kind=BountyEvent.SCOPE_ADDED.value,
+                asset_type="WILDCARD",
+                asset_identifier=identifier,
+                created_at=now,
+            )
+        )
+    estate.session.add(
+        BountyEventRow(
+            platform=other.platform,
+            program_id=other.id,
+            handle=other.handle,
+            program_name=other.name,
+            kind=BountyEvent.PROGRAM_ADDED.value,
+            created_at=now,
+        )
+    )
+    await estate.session.flush()
+
+    service = _service(estate)
+    out = await service.feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+    assert _values(out, NewKind.SCOPE.value) == ["*.acme.com"]
+    row = _sections(out, NewKind.SCOPE.value)[0].items[0]
+    assert row.importable is True
+    assert row.target_exists is False
+    assert row.scope_id is not None
+    assert out.facts[NewKind.SCOPE.value] == {Fact.NOT_TARGET.value: 1}
+    assert _values(out, NewKind.PROGRAM.value) == ["Globex"]
+
+    wide = await service.feed(
+        estate.project_id,
+        estate.user_id,
+        since=now - timedelta(hours=1),
+        ring=ProgramRing.LIBRARY.value,
+    )
+    assert sorted(_values(wide, NewKind.SCOPE.value)) == [
+        "*.acme.com",
+        "app.globex.com",
+    ]
+
+
+async def test_an_asset_leaving_scope_names_the_target_it_covers(estate, now):
+    program = _program("acme", "Acme")
+    estate.session.add(program)
+    await estate.session.flush()
+    tid = await estate.target("legacy.acme.com")
+    estate.session.add(
+        BountyScope(
+            program_id=program.id,
+            asset_type="DOMAIN",
+            asset_identifier="legacy.acme.com",
+            scope_state="out_of_scope",
+            target_value="legacy.acme.com",
+            target_type=TargetType.DOMAIN,
+        )
+    )
+    estate.session.add(
+        BountyEventRow(
+            platform=program.platform,
+            program_id=program.id,
+            handle=program.handle,
+            program_name=program.name,
+            kind=BountyEvent.WENT_OUT_OF_SCOPE.value,
+            asset_type="DOMAIN",
+            asset_identifier="legacy.acme.com",
+            created_at=now,
+        )
+    )
+    await estate.session.flush()
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.counts[NewKind.OUT_OF_SCOPE.value] == 1
+    row = _sections(out, NewKind.OUT_OF_SCOPE.value)[0].items[0]
+    assert row.target_id == tid
+    assert row.target_exists is True
+    assert row.importable is False
+
+
+async def test_a_target_the_scope_added_is_new(estate, now):
+    program = _program("acme", "Acme")
+    estate.session.add(program)
+    await estate.session.flush()
+    estate.session.add(
+        BountyScope(
+            program_id=program.id,
+            asset_type="DOMAIN",
+            asset_identifier="acme.com",
+            scope_state="in_scope",
+            target_value="acme.com",
+            target_type=TargetType.DOMAIN,
+        )
+    )
+    await estate.target("acme.com")
+    await estate.session.flush()
+
+    out = await _service(estate).feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert out.counts[NewKind.TARGET.value] == 1
+    assert out.facts[NewKind.TARGET.value] == {Fact.NOT_SCANNED.value: 1}
+    row = _sections(out, NewKind.TARGET.value)[0].items[0]
+    assert row.program_name == "Acme"
+    assert row.scanned is False
+
+
+async def test_the_mark_moves_and_unseen_reads_it(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts("older", ["a.example.com"], at=now - timedelta(days=2))
+    await estate.scan("example.com", "fresh", at=now - timedelta(minutes=5))
+    await estate.hosts("fresh", ["b.example.com"], at=now - timedelta(minutes=5))
+    service = _service(estate)
+
+    before = await service.unseen(estate.project_id, estate.user_id, bounty=True)
+    marked = await service.mark_seen(estate.user_id, estate.project_id)
+    after = await service.unseen(estate.project_id, estate.user_id, bounty=True)
+    feed = await service.feed(estate.project_id, estate.user_id)
+
+    assert before == 1
+    assert after == 0
+    assert feed.basis == NewBasis.MARK.value
+    assert feed.marked_at == marked
+
+
+async def test_the_route_rejects_a_bad_window_and_ring(estate):
+    with pytest.raises(HTTPException) as bad_window:
+        await whats_new(
+            current_user=None,
+            service=None,
+            session=None,
+            project_id=uuid.uuid4(),
+            window="1y",
+        )
+    assert bad_window.value.status_code == 422
+    with pytest.raises(HTTPException) as bad_ring:
+        await whats_new(
+            current_user=None,
+            service=None,
+            session=None,
+            project_id=uuid.uuid4(),
+            ring="everyone",
+        )
+    assert bad_ring.value.status_code == 422

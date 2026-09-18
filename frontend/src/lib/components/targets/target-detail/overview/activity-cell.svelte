@@ -155,10 +155,10 @@
 			</span>
 		{/if}
 		<a
-			href={ROUTES.changes({ mode: 'timeline', target: target.id })}
+			href={ROUTES.whatsNew({ window: '30d', target: target.id })}
 			class="text-xs text-muted-foreground hover:text-foreground hover:underline"
 		>
-			Timeline
+			What's new
 		</a>
 	{/snippet}
 	<ol class="flex flex-col">

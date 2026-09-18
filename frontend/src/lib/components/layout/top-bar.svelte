@@ -40,7 +40,7 @@
 	<Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
 
 	{#if breadcrumbs.length > 0}
-		<nav class="flex items-center gap-1.5 text-sm">
+		<nav class="flex shrink-0 items-center gap-1.5 text-sm whitespace-nowrap">
 			{#each breadcrumbs as crumb, i (crumb.href ?? crumb.label)}
 				{#if i > 0}
 					<ChevronRight class="size-3.5 text-muted-foreground/50" />

@@ -3,7 +3,7 @@
 	import TargetIcon from '@lucide/svelte/icons/target';
 	import RadarIcon from '@lucide/svelte/icons/radar';
 	import StickyNoteIcon from '@lucide/svelte/icons/sticky-note';
-	import HistoryIcon from '@lucide/svelte/icons/history';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
@@ -19,10 +19,12 @@
 	import ProjectSwitcher from './project-switcher.svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
-	import type { ComponentProps } from 'svelte';
+	import { untrack, type ComponentProps } from 'svelte';
+	import { projectsStore } from '$lib/stores/projects.svelte';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { liveScans } from '$lib/stores/live-scans.svelte';
 	import { reports } from '$lib/stores/reports.svelte';
+	import { whatsNewStore } from '$lib/stores/whats-new.svelte';
 	import { FINDINGS_PATHS, ROUTES, routeLabels } from '$lib/config/routes';
 	import { capabilitiesStore } from '$lib/stores/capabilities.svelte';
 	import { Capability } from '$lib/config/capabilities';
@@ -37,6 +39,15 @@
 		ASSET_DIMENSIONS.map((spec) => ({ title: spec.label, url: ROUTES.surface(spec.tab) }))
 	);
 	const findings = SURFACE[FINDINGS_ROOT];
+	const compact = (n: number) =>
+		new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
+			.format(n)
+			.toLowerCase();
+
+	$effect(() => {
+		const id = projectsStore.activeProject?.id;
+		if (id) untrack(() => void whatsNewStore.fetch(id));
+	});
 
 	const userData = $derived({
 		name: auth.user?.username ?? 'Unknown user',
@@ -50,7 +61,14 @@
 			items: [
 				{ title: routeLabels.dashboard, url: ROUTES.dashboard, icon: LayoutDashboardIcon },
 				{ title: routeLabels.targets, url: ROUTES.targets, icon: TargetIcon },
-				{ title: routeLabels.changes, url: ROUTES.changes(), icon: HistoryIcon },
+				{
+					title: routeLabels['whats-new'],
+					url: ROUTES.whatsNew(),
+					icon: SparklesIcon,
+					badge: whatsNewStore.unseen
+						? { label: compact(whatsNewStore.unseen), tone: 'info' as const }
+						: null
+				},
 				{ title: routeLabels.notes, url: ROUTES.notes, icon: StickyNoteIcon }
 			]
 		},

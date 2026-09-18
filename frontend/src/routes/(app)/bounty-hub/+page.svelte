@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import HistoryIcon from '@lucide/svelte/icons/history';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TargetIcon from '@lucide/svelte/icons/target';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
@@ -283,9 +283,9 @@
 		</div>
 
 		<div class="flex items-center gap-2">
-			<Button variant="outline" size="sm" href={ROUTES.changes()}>
-				<HistoryIcon class="mr-2 size-3.5" />
-				Changes
+			<Button variant="outline" size="sm" href={ROUTES.whatsNew()}>
+				<SparklesIcon class="mr-2 size-3.5" />
+				What's new
 			</Button>
 			<LoadingButton loading={syncing} variant="outline" size="sm" onclick={sync}>
 				<RefreshCwIcon class="mr-2 size-3.5" />

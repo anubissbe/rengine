@@ -1,6 +1,7 @@
 import { toast } from 'svelte-sonner';
 import { authApi, type User } from '$lib/api/auth';
 import { watchesStore } from '$lib/stores/watches.svelte';
+import { whatsNewStore } from '$lib/stores/whats-new.svelte';
 import { projectsStore } from '$lib/stores/projects.svelte';
 import { notificationStore } from '$lib/stores/notifications.svelte';
 import { capabilitiesStore } from '$lib/stores/capabilities.svelte';
@@ -106,6 +107,7 @@ function createAuthStore() {
 		state.isAuthenticated = false;
 		projectsStore.clear();
 		watchesStore.clear();
+		whatsNewStore.clear();
 		notificationStore.reset();
 		capabilitiesStore.reset();
 		onboardingStore.clear();
