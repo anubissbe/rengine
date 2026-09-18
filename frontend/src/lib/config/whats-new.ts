@@ -172,6 +172,12 @@ export const VISUAL_FIELD_LABELS: Record<string, string> = {
 	webserver: 'Server'
 };
 export const VISUAL_MAX_DISTANCE = 64;
+export const VISUAL_KEYS: { key: string; does: string }[] = [
+	{ key: 'j / k', does: 'move' },
+	{ key: 'Enter', does: 'wipe' },
+	{ key: 's', does: 'scan' },
+	{ key: '/', does: 'filter' }
+];
 
 export const GRID_STEPS = 4;
 export const ROWS_SHOWN = 5;

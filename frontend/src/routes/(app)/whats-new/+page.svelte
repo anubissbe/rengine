@@ -22,6 +22,8 @@
 	import { RowSelection } from '$lib/components/scans/results/table/selection.svelte';
 	import KindStrip from '$lib/components/whats-new/kind-strip.svelte';
 	import VisualPairs from '$lib/components/whats-new/visual-pairs.svelte';
+	import VisualCompareDialog from '$lib/components/whats-new/visual-compare-dialog.svelte';
+	import DistanceFilter from '$lib/components/whats-new/distance-filter.svelte';
 	import CountTabs from '$lib/components/count-tabs.svelte';
 	import ActivityGrid from '$lib/components/whats-new/activity-grid.svelte';
 	import GroupCard from '$lib/components/whats-new/group-card.svelte';
@@ -67,6 +69,7 @@
 		NEW_KEYS,
 		NEW_WINDOWS,
 		NEW_TABS,
+		VISUAL_KEYS,
 		NewBasis,
 		NewKind,
 		NewSource,
@@ -141,6 +144,10 @@
 	let visual = $state<VisualFeed | null>(null);
 	let visualLoading = $state(false);
 	let silentOnly = $state(false);
+	let minDistance = $state(1);
+	let visualCursor = $state(-1);
+	let compareIndex = $state(-1);
+	let compareOpen = $state(false);
 	let visualReq = 0;
 	let feed = $state<NewFeed | null>(null);
 	let loading = $state(false);
@@ -388,7 +395,27 @@
 		}
 	}
 
-	let visualPairs = $derived((visual?.pairs ?? []).filter((p) => !silentOnly || p.silent));
+	let visualPairs = $derived(
+		(visual?.pairs ?? []).filter((p) => (!silentOnly || p.silent) && p.distance >= minDistance)
+	);
+	let visualDistances = $derived((visual?.pairs ?? []).map((p) => p.distance));
+
+	function openCompare(index: number) {
+		compareIndex = index;
+		visualCursor = index;
+		compareOpen = true;
+	}
+	function stepCompare(dir: -1 | 1) {
+		const next = compareIndex + dir;
+		if (next < 0 || next >= visualPairs.length) return;
+		compareIndex = next;
+		visualCursor = next;
+	}
+	function scrollVisualCursor() {
+		document
+			.querySelector(`[data-visual-card="${visualCursor}"]`)
+			?.scrollIntoView({ block: 'nearest' });
+	}
 
 	let loadedFor = '';
 	$effect(() => {
@@ -761,7 +788,7 @@
 	}
 	function onKey(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
-		if (watchFor || launchFor || removeFor || sheetOpen) return;
+		if (watchFor || launchFor || removeFor || sheetOpen || compareOpen) return;
 		const t = e.target as HTMLElement | null;
 		const typing =
 			!!t &&
@@ -778,7 +805,27 @@
 			if (e.key === 'Escape') (t as HTMLElement).blur();
 			return;
 		}
-		if (tab === NewTab.VISUAL) return;
+		if (tab === NewTab.VISUAL) {
+			if (compareOpen) return;
+			const n = visualPairs.length;
+			if (e.key === 'j' || e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+				e.preventDefault();
+				visualCursor = Math.min(visualCursor + 1, n - 1);
+				scrollVisualCursor();
+			} else if (e.key === 'k' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+				e.preventDefault();
+				visualCursor = Math.max(visualCursor - 1, 0);
+				scrollVisualCursor();
+			} else if (e.key === 'Enter' && visualCursor >= 0 && visualCursor < n) {
+				e.preventDefault();
+				openCompare(visualCursor);
+			} else if (e.key === 's' && visualPairs[visualCursor]) {
+				launchFor = visualPairs[visualCursor].target_id;
+			} else if (e.key === 'Escape') {
+				visualCursor = -1;
+			}
+			return;
+		}
 		const row = rows[cursor] ?? null;
 		if (e.key === 'j' || e.key === 'ArrowDown') {
 			e.preventDefault();
@@ -900,6 +947,13 @@
 			placeholder="Target"
 			onChange={(v) => (targetId = v)}
 		/>
+		{#if tab === NewTab.VISUAL && visual}
+			<DistanceFilter
+				distances={visualDistances}
+				min={minDistance}
+				onChange={(v) => (minDistance = v)}
+			/>
+		{/if}
 		{#if tab === NewTab.VISUAL}
 			<Button
 				variant={silentOnly ? 'secondary' : 'outline'}
@@ -956,8 +1010,11 @@
 			<div class="transition-opacity {visualLoading ? 'opacity-60' : ''}">
 				<VisualPairs
 					pairs={visualPairs}
+					cursor={visualCursor}
 					onOpen={openPair}
+					onCompare={openCompare}
 					onScan={(pair) => (launchFor = pair.target_id)}
+					onPick={(i) => (visualCursor = i)}
 				/>
 				{#if visual.truncated}
 					<p class="py-3 text-center text-xs text-muted-foreground">
@@ -1071,6 +1128,13 @@
 		</div>
 	{/if}
 
+	{#if tab === NewTab.VISUAL}
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-2xs text-muted-foreground">
+			{#each VISUAL_KEYS as k (k.key)}
+				<span class="inline-flex items-center gap-1.5"><Kbd.Root>{k.key}</Kbd.Root>{k.does}</span>
+			{/each}
+		</div>
+	{/if}
 	{#if tab === NewTab.NEW}
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-2xs text-muted-foreground">
 			{#each keys as k (k.key)}
@@ -1129,6 +1193,18 @@
 		}}
 	/>
 {/if}
+
+<VisualCompareDialog
+	pairs={visualPairs}
+	index={compareIndex}
+	open={compareOpen}
+	onOpenChange={(v) => (compareOpen = v)}
+	onStep={stepCompare}
+	onOpenHost={(pair) => {
+		compareOpen = false;
+		void openPair(pair);
+	}}
+/>
 
 {#if projectId}
 	<WebAssetDetailSheet

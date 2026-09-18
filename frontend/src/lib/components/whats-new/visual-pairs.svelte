@@ -10,11 +10,14 @@
 
 	interface Props {
 		pairs: VisualPair[];
+		cursor?: number;
 		onOpen: (pair: VisualPair) => void;
+		onCompare: (index: number) => void;
 		onScan: (pair: VisualPair) => void;
+		onPick?: (index: number) => void;
 	}
 
-	let { pairs, onOpen, onScan }: Props = $props();
+	let { pairs, cursor = -1, onOpen, onCompare, onScan, onPick }: Props = $props();
 
 	const METER = 5;
 	const level = (d: number) =>
@@ -42,8 +45,16 @@
 </script>
 
 <div class="grid grid-cols-[repeat(auto-fill,minmax(21rem,1fr))] gap-3">
-	{#each pairs as pair (pair.id)}
-		<article class="group/pair flex flex-col overflow-clip rounded-xl border bg-card">
+	{#each pairs as pair, i (pair.id)}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
+		<article
+			data-visual-card={i}
+			class="group/pair flex flex-col overflow-clip rounded-xl border bg-card transition-shadow {cursor ===
+			i
+				? 'ring-2 ring-ring'
+				: ''}"
+			onclick={() => onPick?.(i)}
+		>
 			<div class="flex items-center gap-2 border-b px-3 py-2">
 				<button
 					type="button"
@@ -63,21 +74,28 @@
 					{pair.target_value}
 				</a>
 			</div>
-			<div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3">
+			<button
+				type="button"
+				class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3 text-left focus-visible:outline-none"
+				aria-label="Compare {pair.host} before and after"
+				onclick={() => onCompare(i)}
+			>
 				<ScreenshotThumb
 					path={pair.before_path}
 					alt="{pair.host} before"
 					class="aspect-[16/10] w-full"
-					preview
+					interactive={false}
 				/>
-				<ArrowRight class="size-4 text-muted-foreground" />
+				<ArrowRight
+					class="size-4 text-muted-foreground transition-transform group-hover/pair:translate-x-0.5"
+				/>
 				<ScreenshotThumb
 					path={pair.after_path}
 					alt="{pair.host} after"
 					class="aspect-[16/10] w-full"
-					preview
+					interactive={false}
 				/>
-			</div>
+			</button>
 			<div class="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2 pb-3">
 				<span class="flex items-center gap-0.5" aria-label="Distance {pair.distance} of 64">
 					{#each { length: METER } as _, i (i)}
@@ -100,13 +118,16 @@
 					{/each}
 				{/if}
 				<span class="ml-auto flex items-center gap-0.5">
+					<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => onCompare(i)}>
+						Wipe
+					</Button>
 					<Button
 						variant="ghost"
 						size="sm"
 						class="h-7 px-2 text-xs"
 						href={ROUTES.compare(pair.scan_id, pair.previous_scan_id)}
 					>
-						Compare
+						Runs
 					</Button>
 					<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => onScan(pair)}>
 						Scan
