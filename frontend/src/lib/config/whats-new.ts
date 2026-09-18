@@ -91,6 +91,12 @@ export const BOUNTY_KINDS: ReadonlySet<string> = new Set([
 	NewKind.OUT_OF_SCOPE
 ]);
 export const GONE_KINDS: ReadonlySet<string> = new Set([NewKind.OUT_OF_SCOPE, NewKind.RETIRED]);
+export const SELECTABLE_KINDS: ReadonlySet<string> = new Set([
+	NewKind.SCOPE,
+	NewKind.CERT_HOST,
+	NewKind.WEB_ASSET,
+	NewKind.TARGET
+]);
 
 export const KIND_DIMENSION: Partial<Record<NewKindKey, SurfaceDimension>> = {
 	[NewKind.WEB_ASSET]: SurfaceDimension.WEB_ASSETS,

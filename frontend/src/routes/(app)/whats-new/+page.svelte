@@ -79,6 +79,7 @@
 		SOURCE_OPTIONS,
 		RING_LABELS,
 		ROWS_SHOWN,
+		SELECTABLE_KINDS,
 		SINCE_KEY,
 		SubjectKind,
 		type NewKindKey,
@@ -98,12 +99,6 @@
 	const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 	const RING_LIBRARY = `ring:${ProgramRing.LIBRARY}`;
 	const Q_DEBOUNCE_MS = 250;
-	const SELECTABLE_KINDS = new Set<string>([
-		NewKind.SCOPE,
-		NewKind.CERT_HOST,
-		NewKind.WEB_ASSET,
-		NewKind.TARGET
-	]);
 	const GRID_LEVELS = [0, 0.3, 0.55, 0.8, 1];
 
 	const initial = page.url.searchParams;

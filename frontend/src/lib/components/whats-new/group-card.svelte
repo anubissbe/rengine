@@ -18,6 +18,7 @@
 		KIND_NOUN,
 		NewKind,
 		ROWS_SHOWN,
+		SELECTABLE_KINDS,
 		SubjectKind,
 		type NewKindKey
 	} from '$lib/config/whats-new';
@@ -83,13 +84,6 @@
 			.flatMap((s) => s.items)
 			.filter((i) => i.importable && !i.target_exists)
 	);
-
-	const SELECTABLE = new Set<string>([
-		NewKind.SCOPE,
-		NewKind.CERT_HOST,
-		NewKind.WEB_ASSET,
-		NewKind.TARGET
-	]);
 
 	let subject = $derived(group.subject);
 	let isRun = $derived(subject.kind === SubjectKind.RUN);
@@ -266,7 +260,7 @@
 					index={rowIndex(item)}
 					cursor={cursorId === item.id}
 					checked={isChecked(item.id)}
-					selectable={SELECTABLE.has(item.kind)}
+					selectable={SELECTABLE_KINDS.has(item.kind)}
 					busy={isBusy(item.id)}
 					showTime={!isRun}
 					sheet={SHEET_KINDS.has(item.kind) && !!item.scan_id}

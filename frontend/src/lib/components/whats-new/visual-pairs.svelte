@@ -127,7 +127,7 @@
 						class="h-7 px-2 text-xs"
 						href={ROUTES.compare(pair.scan_id, pair.previous_scan_id)}
 					>
-						Runs
+						Compare runs
 					</Button>
 					<Button variant="ghost" size="sm" class="h-7 px-2 text-xs" onclick={() => onScan(pair)}>
 						Scan
