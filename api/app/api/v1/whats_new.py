@@ -16,7 +16,7 @@ from shared.definitions.whats_new import (
     NEW_WINDOWS,
     ProgramRing,
 )
-from shared.models.whats_new import NewFeed, NewMark, NewUnseen
+from shared.models.whats_new import NewFeed, NewMark, NewUnseen, VisualFeed
 
 router = APIRouter(prefix="/whats-new", tags=["whats-new"])
 
@@ -89,6 +89,40 @@ async def whats_new(
         ring=ring,
         q=q,
         bounty=await _bounty(session),
+    )
+
+
+@router.get("/visual", response_model=VisualFeed)
+async def whats_new_visual(
+    current_user: CurrentUser,
+    service: ServiceDep,
+    project_id: Annotated[UUID, Query(description="Project ID")],
+    since: datetime | None = None,
+    window: Annotated[str | None, Query(max_length=8)] = None,
+    day: date | None = None,
+    day_to: date | None = None,
+    target_id: UUID | None = None,
+    q: Annotated[str | None, Query(max_length=MAX_TEXT_FILTER)] = None,
+) -> VisualFeed:
+    if window is not None and window not in NEW_WINDOWS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Window must be one of {', '.join(NEW_WINDOWS)}.",
+        )
+    if day_to is not None and (day is None or day_to < day):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="day_to needs a day at or before it.",
+        )
+    return await service.visual(
+        project_id,
+        current_user.id,
+        since=since,
+        window=window,
+        day_from=day,
+        day_to=day_to,
+        target_id=target_id,
+        q=q,
     )
 
 

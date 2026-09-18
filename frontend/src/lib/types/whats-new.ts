@@ -83,6 +83,52 @@ export interface NewFeed {
 	groups: NewGroup[];
 	truncated: boolean;
 	first_runs: number;
+	visual: number;
+}
+
+export interface VisualPair {
+	id: string;
+	host: string;
+	at: string;
+	distance: number;
+	before_path: string;
+	after_path: string;
+	before_status: number | null;
+	after_status: number | null;
+	before_title: string | null;
+	after_title: string | null;
+	before_tech: string[];
+	after_tech: string[];
+	before_server: string | null;
+	after_server: string | null;
+	moved: string[];
+	silent: boolean;
+	target_id: string;
+	target_value: string;
+	target_type: string;
+	scan_id: string;
+	previous_scan_id: string;
+	query: string;
+}
+
+export interface VisualFeed {
+	since: string;
+	until: string | null;
+	basis: string;
+	window: string | null;
+	total: number;
+	silent: number;
+	pairs: VisualPair[];
+	truncated: boolean;
+}
+
+export interface VisualParams {
+	since?: string;
+	window?: string;
+	day?: string;
+	day_to?: string;
+	target_id?: string;
+	q?: string;
 }
 
 export interface NewMark {

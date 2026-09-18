@@ -19,7 +19,7 @@ from sqlalchemy import (
     select,
     values,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import BIT, JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -54,6 +54,9 @@ from shared.definitions.whats_new import (
     SCAN_KINDS,
     SCOPE_EVENTS,
     SOURCE_LABELS,
+    VISUAL_DISTANCE,
+    VISUAL_FIELDS,
+    VISUAL_LIMIT,
     Fact,
     NewBasis,
     NewKind,
@@ -62,7 +65,7 @@ from shared.definitions.whats_new import (
     SubjectKind,
     mark_key,
 )
-from shared.enums.scan import ScanStatus
+from shared.enums.scan import SCAN_TERMINAL_STATUSES, ScanStatus
 from shared.models.bounty_program import BountyEventRow, BountyProgram, BountyScope
 from shared.models.port import Port
 from shared.models.scan import Scan
@@ -78,6 +81,8 @@ from shared.models.whats_new import (
     NewItem,
     NewSection,
     NewSubject,
+    VisualFeed,
+    VisualPair,
 )
 from shared.services.scan_scope import census_only
 from shared.utils.datetime import utc_now
@@ -154,6 +159,12 @@ def _source_label(source: str | None) -> str | None:
     return SOURCE_LABELS.get(source, source) if source else None
 
 
+def _visual_value(value):
+    if isinstance(value, list):
+        return sorted(str(v) for v in value)
+    return value or None
+
+
 def _day_start(d: date) -> datetime:
     return datetime.combine(d, time.min, tzinfo=UTC)
 
@@ -165,6 +176,7 @@ class _Groups:
         self.facts: dict[str, dict[str, int]] = defaultdict(dict)
         self.daily: dict[str, dict[str, int]] = defaultdict(dict)
         self.first_runs = 0
+        self.visual = 0
 
     def group(self, gid: str, subject: NewSubject, at: datetime) -> NewGroup:
         g = self.by_id.get(gid)
@@ -242,20 +254,9 @@ class WhatsNewService:
     ) -> NewFeed:
         now = utc_now()
         marked_at = await self.mark(user_id, project_id)
-        until: datetime | None = None
-        if day_from is not None:
-            basis = NewBasis.DAYS.value
-            cutoff = _day_start(day_from)
-            until = _day_start((day_to or day_from) + timedelta(days=1))
-        elif since is not None:
-            basis, cutoff = NewBasis.MARK.value, since
-        elif window:
-            basis, cutoff = NewBasis.WINDOW.value, now - NEW_WINDOWS[window]
-        elif marked_at is not None:
-            basis, cutoff = NewBasis.MARK.value, marked_at
-        else:
-            window = DEFAULT_NEW_WINDOW
-            basis, cutoff = NewBasis.WINDOW.value, now - NEW_WINDOWS[window]
+        basis, cutoff, until, window = self._period(
+            now, marked_at, since, window, day_from, day_to
+        )
 
         grid_start = _day_start(now.date() - timedelta(days=GRID_DAYS - 1))
         range_start = min(cutoff, grid_start) if grid else cutoff
@@ -279,6 +280,7 @@ class WhatsNewService:
             q,
             rows,
         )
+        out.visual = await self._visual_count(project_id, cutoff, until, target_ids, q)
         if bounty:
             await self._bounty(
                 out,
@@ -313,7 +315,26 @@ class WhatsNewService:
             groups=groups[:GROUP_LIMIT],
             truncated=truncated,
             first_runs=out.first_runs,
+            visual=out.visual,
         )
+
+    @staticmethod
+    def _period(now, marked_at, since, window, day_from, day_to):
+        until: datetime | None = None
+        if day_from is not None:
+            basis = NewBasis.DAYS.value
+            cutoff = _day_start(day_from)
+            until = _day_start((day_to or day_from) + timedelta(days=1))
+        elif since is not None:
+            basis, cutoff = NewBasis.MARK.value, since
+        elif window:
+            basis, cutoff = NewBasis.WINDOW.value, now - NEW_WINDOWS[window]
+        elif marked_at is not None:
+            basis, cutoff = NewBasis.MARK.value, marked_at
+        else:
+            window = DEFAULT_NEW_WINDOW
+            basis, cutoff = NewBasis.WINDOW.value, now - NEW_WINDOWS[window]
+        return basis, cutoff, until, window
 
     async def unseen(self, project_id: UUID, user_id: UUID, *, bounty: bool) -> int:
         feed = await self.feed(
@@ -513,6 +534,167 @@ class WhatsNewService:
             rows and NewKind.RETIRED.value in wanted,
         )
         await self._previous_runs(out, scans)
+
+    async def _visual_count(self, project_id, since, until, target_ids, q) -> int:
+        pairs = await self._run_pairs(project_id, since, until, target_ids)
+        if not pairs:
+            return 0
+        stmt = select(func.count()).select_from(self._pairs_source(pairs, q))
+        return int(await self.session.scalar(stmt) or 0)
+
+    # ---------- visual changes ----------
+
+    async def _run_pairs(
+        self, project_id: UUID, since, until, target_ids
+    ) -> list[tuple[UUID, UUID]]:
+        ordering = func.coalesce(Scan.started_at, Scan.created_at)
+        conds = [
+            Scan.project_id == project_id,
+            census_only(),
+            Scan.status.in_(SCAN_TERMINAL_STATUSES),
+        ]
+        if target_ids is not None:
+            conds.append(Scan.target_id.in_(target_ids))
+        ranked = (
+            select(
+                Scan.id.label("id"),
+                ordering.label("at"),
+                func.lag(Scan.id)
+                .over(partition_by=Scan.target_id, order_by=ordering.asc())
+                .label("prev_id"),
+            )
+            .where(*conds)
+            .subquery()
+        )
+        window = [ranked.c.prev_id.is_not(None), ranked.c.at >= since]
+        if until is not None:
+            window.append(ranked.c.at < until)
+        rows = await self.session.execute(
+            select(ranked.c.id, ranked.c.prev_id).where(*window)
+        )
+        return [(r[0], r[1]) for r in rows.all()]
+
+    @staticmethod
+    def _pairs_source(pairs: list[tuple[UUID, UUID]], q: str | None):
+        table = values(
+            column("cur", Uuid), column("prev", Uuid), name="run_pairs"
+        ).data(pairs)
+        a = aliased(Subdomain)
+        b = aliased(Subdomain)
+        distance = func.bit_count(
+            cast(a.screenshot_phash.op("#")(b.screenshot_phash), BIT(64))
+        ).label("distance")
+        conds = [
+            a.screenshot_phash.is_not(None),
+            b.screenshot_phash.is_not(None),
+            a.screenshot_path.is_not(None),
+            b.screenshot_path.is_not(None),
+        ]
+        if q:
+            conds.append(a.name.ilike(f"%{q}%"))
+        return (
+            select(a.id)
+            .select_from(table)
+            .join(a, a.scan_id == table.c.cur)
+            .join(b, (b.scan_id == table.c.prev) & (b.name == a.name))
+            .where(*conds, distance > VISUAL_DISTANCE)
+            .subquery()
+        )
+
+    async def visual(
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        *,
+        since: datetime | None = None,
+        window: str | None = None,
+        day_from: date | None = None,
+        day_to: date | None = None,
+        target_id: UUID | None = None,
+        q: str | None = None,
+        limit: int = VISUAL_LIMIT,
+    ) -> VisualFeed:
+        now = utc_now()
+        marked_at = await self.mark(user_id, project_id)
+        basis, cutoff, until, window = self._period(
+            now, marked_at, since, window, day_from, day_to
+        )
+        q = (q or "").strip() or None
+        target_ids = [target_id] if target_id is not None else None
+        pairs = await self._run_pairs(project_id, cutoff, until, target_ids)
+        feed = VisualFeed(
+            since=cutoff,
+            until=until,
+            basis=basis,
+            window=window if basis == NewBasis.WINDOW.value else None,
+        )
+        if not pairs:
+            return feed
+        table = values(
+            column("cur", Uuid), column("prev", Uuid), name="run_pairs"
+        ).data(pairs)
+        a = aliased(Subdomain)
+        b = aliased(Subdomain)
+        distance = func.bit_count(
+            cast(a.screenshot_phash.op("#")(b.screenshot_phash), BIT(64))
+        ).label("distance")
+        conds = [
+            a.screenshot_phash.is_not(None),
+            b.screenshot_phash.is_not(None),
+            a.screenshot_path.is_not(None),
+            b.screenshot_path.is_not(None),
+            distance > VISUAL_DISTANCE,
+        ]
+        if q:
+            conds.append(a.name.ilike(f"%{q}%"))
+        rows = (
+            await self.session.execute(
+                select(a, b, table.c.prev, distance, Target)
+                .select_from(table)
+                .join(a, a.scan_id == table.c.cur)
+                .join(b, (b.scan_id == table.c.prev) & (b.name == a.name))
+                .join(Target, Target.id == a.target_id)
+                .where(*conds)
+                .order_by(distance.desc(), a.name)
+                .limit(limit + 1)
+            )
+        ).all()
+        feed.truncated = len(rows) > limit
+        for cur, prev, prev_scan, dist, target in rows[:limit]:
+            moved = [
+                field
+                for field in VISUAL_FIELDS
+                if _visual_value(getattr(cur, field))
+                != _visual_value(getattr(prev, field))
+            ]
+            pair = VisualPair(
+                id=f"visual:{cur.id}",
+                host=cur.name,
+                at=cur.discovered_at,
+                distance=int(dist),
+                before_path=prev.screenshot_path or "",
+                after_path=cur.screenshot_path or "",
+                before_status=prev.http_status,
+                after_status=cur.http_status,
+                before_title=prev.page_title,
+                after_title=cur.page_title,
+                before_tech=list(prev.tech or []),
+                after_tech=list(cur.tech or []),
+                before_server=prev.webserver,
+                after_server=cur.webserver,
+                moved=moved,
+                silent=not moved,
+                target_id=target.id,
+                target_value=target.target_value,
+                target_type=target.target_type.value,
+                scan_id=cur.scan_id,
+                previous_scan_id=prev_scan,
+                query=f"host={cur.name}",
+            )
+            feed.pairs.append(pair)
+            feed.silent += int(pair.silent)
+        feed.total = len(feed.pairs)
+        return feed
 
     async def _baseline_scans(
         self, model, scans: dict[UUID, Scan]

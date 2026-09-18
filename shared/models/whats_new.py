@@ -93,6 +93,43 @@ class NewFeed(BaseModel):
     groups: list[NewGroup] = Field(default_factory=list)
     truncated: bool = False
     first_runs: int = 0
+    visual: int = 0
+
+
+class VisualPair(BaseModel):
+    id: str
+    host: str
+    at: datetime
+    distance: int
+    before_path: str
+    after_path: str
+    before_status: int | None = None
+    after_status: int | None = None
+    before_title: str | None = None
+    after_title: str | None = None
+    before_tech: list[str] = Field(default_factory=list)
+    after_tech: list[str] = Field(default_factory=list)
+    before_server: str | None = None
+    after_server: str | None = None
+    moved: list[str] = Field(default_factory=list)
+    silent: bool = False
+    target_id: uuid.UUID
+    target_value: str
+    target_type: str
+    scan_id: uuid.UUID
+    previous_scan_id: uuid.UUID
+    query: str
+
+
+class VisualFeed(BaseModel):
+    since: datetime
+    until: datetime | None = None
+    basis: str
+    window: str | None = None
+    total: int = 0
+    silent: int = 0
+    pairs: list[VisualPair] = Field(default_factory=list)
+    truncated: bool = False
 
 
 class NewMark(BaseModel):

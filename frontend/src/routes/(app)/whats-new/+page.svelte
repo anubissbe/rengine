@@ -21,6 +21,8 @@
 	import WatchDialog from '$lib/components/bounty-hub/watch-dialog.svelte';
 	import { RowSelection } from '$lib/components/scans/results/table/selection.svelte';
 	import KindStrip from '$lib/components/whats-new/kind-strip.svelte';
+	import VisualPairs from '$lib/components/whats-new/visual-pairs.svelte';
+	import CountTabs from '$lib/components/count-tabs.svelte';
 	import ActivityGrid from '$lib/components/whats-new/activity-grid.svelte';
 	import GroupCard from '$lib/components/whats-new/group-card.svelte';
 	import PickPopover, { type PickOption } from '$lib/components/whats-new/pick-popover.svelte';
@@ -64,9 +66,11 @@
 		KIND_ORDER,
 		NEW_KEYS,
 		NEW_WINDOWS,
+		NEW_TABS,
 		NewBasis,
 		NewKind,
 		NewSource,
+		NewTab,
 		ProgramRing,
 		SOURCE_KINDS,
 		SOURCE_OPTIONS,
@@ -76,12 +80,13 @@
 		SubjectKind,
 		type NewKindKey,
 		type NewSourceKey,
+		type NewTabKey,
 		type NewWindowKey
 	} from '$lib/config/whats-new';
 	import { runDescription, runStarted } from '$lib/utilities/rechecks';
 	import { formatShortDate } from '$lib/utilities/dates';
 	import { rowHref } from '$lib/utilities/whats-new';
-	import type { NewFeed, NewItem } from '$lib/types/whats-new';
+	import type { NewFeed, NewItem, VisualFeed, VisualPair } from '$lib/types/whats-new';
 	import type { SeedPick } from '$lib/types/recheck';
 
 	const WINDOW_KEYS = new Set<string>(NEW_WINDOWS.map((w) => w.key));
@@ -129,6 +134,14 @@
 	let q = $state(initial.get('q') ?? '');
 	let qApplied = $state(initial.get('q') ?? '');
 
+	const TAB_KEYS = new Set<string>(NEW_TABS.map((t) => t.key));
+	let tab = $state<NewTabKey>(
+		TAB_KEYS.has(initial.get('tab') ?? '') ? (initial.get('tab') as NewTabKey) : NewTab.NEW
+	);
+	let visual = $state<VisualFeed | null>(null);
+	let visualLoading = $state(false);
+	let silentOnly = $state(false);
+	let visualReq = 0;
 	let feed = $state<NewFeed | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -296,6 +309,7 @@
 	function syncUrl() {
 		try {
 			const sp = new SvelteURLSearchParams();
+			if (tab !== NewTab.NEW) sp.set('tab', tab);
 			if (range !== SINCE_KEY) sp.set('window', range);
 			if (dayFrom) sp.set('day', dayFrom);
 			if (dayTo) sp.set('day_to', dayTo);
@@ -352,6 +366,30 @@
 		}
 	}
 
+	async function loadVisual(silent = false) {
+		if (!projectId) return;
+		const my = ++visualReq;
+		if (!silent) visualLoading = true;
+		try {
+			const res = await whatsNewApi.visual(projectId, {
+				window: dayFrom ? undefined : range === SINCE_KEY ? undefined : range,
+				day: dayFrom ?? undefined,
+				day_to: dayTo ?? undefined,
+				target_id: targetId || undefined,
+				q: qApplied || undefined
+			});
+			if (my !== visualReq) return;
+			visual = res;
+		} catch (e) {
+			if (my !== visualReq) return;
+			toast.error(e instanceof Error ? e.message : 'Visual changes not loaded');
+		} finally {
+			if (my === visualReq) visualLoading = false;
+		}
+	}
+
+	let visualPairs = $derived((visual?.pairs ?? []).filter((p) => !silentOnly || p.silent));
+
 	let loadedFor = '';
 	$effect(() => {
 		const id = projectId;
@@ -363,16 +401,19 @@
 		void qApplied;
 		void source;
 		void kinds.size;
+		const onVisual = tab === NewTab.VISUAL;
 		untrack(() => {
 			if (id && loadedFor !== id) {
 				loadedFor = id;
 				feed = null;
+				visual = null;
 				selection.clear();
 				expanded.clear();
 				cursor = -1;
 			}
 			syncUrl();
 			void load();
+			if (onVisual) void loadVisual();
 		});
 	});
 
@@ -401,6 +442,7 @@
 		if (liveScans.completedTick > 0) {
 			untrack(() => {
 				void load(true);
+				if (tab === NewTab.VISUAL) void loadVisual(true);
 				if (projectId) void whatsNewStore.fetch(projectId, true);
 			});
 		}
@@ -654,6 +696,30 @@
 		}
 	}
 
+	async function openPair(pair: VisualPair) {
+		if (!projectId || opening) return;
+		opening = pair.id;
+		try {
+			sheetScan = pair.scan_id;
+			const res = await subdomainsApi.search(
+				projectId,
+				pair.scan_id,
+				compileQuery({ ...emptyQuery(), search: exactToken('host', pair.host) }, 'name', 1, 0, 5)
+			);
+			const hit = res.items.find((s) => s.name === pair.host) ?? null;
+			if (!hit) {
+				toast.error('Web asset not found in this scan');
+				return;
+			}
+			sheetSub = hit;
+			sheetOpen = true;
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'Row not loaded');
+		} finally {
+			opening = null;
+		}
+	}
+
 	// ---------- selection ----------
 
 	function check(item: NewItem, shift: boolean) {
@@ -712,6 +778,7 @@
 			if (e.key === 'Escape') (t as HTMLElement).blur();
 			return;
 		}
+		if (tab === NewTab.VISUAL) return;
 		const row = rows[cursor] ?? null;
 		if (e.key === 'j' || e.key === 'ArrowDown') {
 			e.preventDefault();
@@ -785,6 +852,13 @@
 		</div>
 	</div>
 
+	<CountTabs
+		tabs={NEW_TABS}
+		value={tab}
+		counts={feed ? { [NewTab.NEW]: total, [NewTab.VISUAL]: feed.visual } : null}
+		onChange={(k) => (tab = k as NewTabKey)}
+	/>
+
 	<div
 		class="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 bg-background/95 px-4 py-2 backdrop-blur"
 	>
@@ -802,7 +876,7 @@
 				spellcheck={false}
 			/>
 		</div>
-		{#if bounty}
+		{#if bounty && tab === NewTab.NEW}
 			<ToggleGroup.Root
 				type="single"
 				value={source}
@@ -826,7 +900,19 @@
 			placeholder="Target"
 			onChange={(v) => (targetId = v)}
 		/>
-		{#if bounty && sourceOn !== NewSource.TARGETS}
+		{#if tab === NewTab.VISUAL}
+			<Button
+				variant={silentOnly ? 'secondary' : 'outline'}
+				size="sm"
+				class="h-8 text-xs font-normal"
+				aria-pressed={silentOnly}
+				onclick={() => (silentOnly = !silentOnly)}
+			>
+				Silent redeploys{#if visual?.silent}
+					<span class="text-muted-foreground tabular-nums">{visual.silent}</span>{/if}
+			</Button>
+		{/if}
+		{#if bounty && sourceOn !== NewSource.TARGETS && tab === NewTab.NEW}
 			<PickPopover
 				label={RING_LABELS[ProgramRing.ENGAGED]}
 				value={program}
@@ -856,7 +942,37 @@
 		{/if}
 	</div>
 
-	{#if feed}
+	{#if tab === NewTab.VISUAL}
+		{#if visual && !visualLoading && visualPairs.length === 0}
+			<EmptyState
+				icon={Sparkles}
+				title={silentOnly
+					? `No silent redeploys ${periodLabel}`
+					: `No visual changes ${periodLabel}`}
+				description="A host counts once both runs captured it and the screenshots differ."
+				class="rounded-xl"
+			/>
+		{:else if visual}
+			<div class="transition-opacity {visualLoading ? 'opacity-60' : ''}">
+				<VisualPairs
+					pairs={visualPairs}
+					onOpen={openPair}
+					onScan={(pair) => (launchFor = pair.target_id)}
+				/>
+				{#if visual.truncated}
+					<p class="py-3 text-center text-xs text-muted-foreground">
+						Largest {visual.pairs.length} changes shown. Narrow the period or filter to see the rest.
+					</p>
+				{/if}
+			</div>
+		{:else}
+			<div class="grid grid-cols-[repeat(auto-fill,minmax(21rem,1fr))] gap-3">
+				{#each { length: 6 } as _, i (i)}
+					<Skeleton class="h-52 rounded-xl" />
+				{/each}
+			</div>
+		{/if}
+	{:else if feed}
 		{@const hasTiles = visibleKinds.some((k) => (feed?.counts[k] ?? 0) > 0 || kinds.has(k))}
 		<div class="overflow-clip rounded-xl border bg-card">
 			<KindStrip
@@ -904,7 +1020,7 @@
 		</div>
 	{/if}
 
-	{#if error}
+	{#if tab === NewTab.VISUAL}{:else if error}
 		<div class="flex flex-col items-center gap-3 rounded-xl border bg-card py-16">
 			<p class="text-sm text-muted-foreground">{error}</p>
 			<Button size="sm" variant="outline" onclick={() => load()}>Retry</Button>
@@ -955,11 +1071,13 @@
 		</div>
 	{/if}
 
-	<div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-2xs text-muted-foreground">
-		{#each keys as k (k.key)}
-			<span class="inline-flex items-center gap-1.5"><Kbd.Root>{k.key}</Kbd.Root>{k.does}</span>
-		{/each}
-	</div>
+	{#if tab === NewTab.NEW}
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-2xs text-muted-foreground">
+			{#each keys as k (k.key)}
+				<span class="inline-flex items-center gap-1.5"><Kbd.Root>{k.key}</Kbd.Root>{k.does}</span>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <SelectionActionBar selectedCount={selection.size} noun="row" onClear={() => selection.clear()}>

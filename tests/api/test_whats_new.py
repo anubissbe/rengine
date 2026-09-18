@@ -399,6 +399,49 @@ async def test_a_target_the_scope_added_is_new(estate, now):
     assert row.scanned is False
 
 
+async def test_a_host_whose_screenshot_moved_is_a_visual_pair(estate, now):
+    await estate.scan("example.com", "older", at=now - timedelta(days=2))
+    await estate.hosts(
+        "older",
+        ["a.example.com"],
+        at=now - timedelta(days=2),
+        status=200,
+        title="Home",
+        phash=1,
+    )
+    await estate.hosts(
+        "older", ["same.example.com"], at=now - timedelta(days=2), phash=255
+    )
+    await estate.scan("example.com", "fresh", at=now)
+    await estate.hosts(
+        "fresh",
+        ["a.example.com"],
+        at=now,
+        status=200,
+        title="Home",
+        phash=0xFFFF,
+    )
+    await estate.hosts("fresh", ["same.example.com"], at=now, phash=255)
+
+    service = _service(estate)
+    out = await service.visual(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+    feed = await service.feed(
+        estate.project_id, estate.user_id, since=now - timedelta(hours=1)
+    )
+
+    assert [p.host for p in out.pairs] == ["a.example.com"]
+    pair = out.pairs[0]
+    assert pair.distance == 15
+    assert pair.moved == []
+    assert pair.silent is True
+    assert pair.scan_id == estate.scans["fresh"]
+    assert pair.previous_scan_id == estate.scans["older"]
+    assert out.silent == 1
+    assert feed.visual == 1
+
+
 async def test_the_mark_moves_and_unseen_reads_it(estate, now):
     await estate.scan("example.com", "older", at=now - timedelta(days=2))
     await estate.hosts("older", ["a.example.com"], at=now - timedelta(days=2))

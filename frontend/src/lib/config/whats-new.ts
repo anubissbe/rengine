@@ -158,6 +158,21 @@ export const SOURCE_KINDS: Record<NewSourceKey, ReadonlySet<string>> = {
 	[NewSource.BOUNTY]: BOUNTY_KINDS
 };
 
+export const NewTab = { NEW: 'new', VISUAL: 'visual' } as const;
+export type NewTabKey = (typeof NewTab)[keyof typeof NewTab];
+export const NEW_TABS: { key: NewTabKey; label: string }[] = [
+	{ key: NewTab.NEW, label: 'New' },
+	{ key: NewTab.VISUAL, label: 'Visual changes' }
+];
+
+export const VISUAL_FIELD_LABELS: Record<string, string> = {
+	http_status: 'Status',
+	page_title: 'Title',
+	tech: 'Technology',
+	webserver: 'Server'
+};
+export const VISUAL_MAX_DISTANCE = 64;
+
 export const GRID_STEPS = 4;
 export const ROWS_SHOWN = 5;
 

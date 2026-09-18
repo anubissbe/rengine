@@ -6,6 +6,7 @@ from datetime import timedelta
 from enum import StrEnum
 
 from shared.definitions.bounty_programs import BountyEvent
+from shared.definitions.correlation import SCREENSHOT_DISTANCE
 from shared.definitions.surface import SurfaceDimension
 
 
@@ -127,6 +128,22 @@ EVENT_KIND: dict[str, str] = {
     **dict.fromkeys(SCOPE_EVENTS, NewKind.SCOPE.value),
     **dict.fromkeys(PROGRAM_EVENTS, NewKind.PROGRAM.value),
     **dict.fromkeys(GONE_EVENTS, NewKind.OUT_OF_SCOPE.value),
+}
+
+
+class NewTab(StrEnum):
+    NEW = "new"
+    VISUAL = "visual"
+
+
+VISUAL_DISTANCE = SCREENSHOT_DISTANCE
+VISUAL_LIMIT = 300
+VISUAL_FIELDS: tuple[str, ...] = ("http_status", "page_title", "tech", "webserver")
+VISUAL_FIELD_LABELS: dict[str, str] = {
+    "http_status": "Status",
+    "page_title": "Title",
+    "tech": "Technology",
+    "webserver": "Server",
 }
 
 
