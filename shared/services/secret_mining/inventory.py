@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,7 @@ class SecretInventory:
         scan_id: uuid.UUID,
         target_id: uuid.UUID,
         project_id: uuid.UUID,
+        incremental: bool = False,
     ) -> None:
         self.session = session
         self.scan_id = scan_id
@@ -84,11 +85,14 @@ class SecretInventory:
         self.project_id = project_id
         self._ids: dict[str, uuid.UUID] = {}
         self._hosts: dict[str, set[str]] = {}
+        self._hosts_floor: dict[str, int] = {}
         self._sightings: dict[str, int] = {}
         self._seen: set[tuple[str, str, str]] = set()
-        self._cleared = False
+        self._cleared = incremental
         self.secrets = 0
         self.sightings = 0
+        if incremental:
+            self._load()
 
     def _clear(self) -> None:
         self.session.execute(delete(Secret).where(Secret.scan_id == self.scan_id))
@@ -96,6 +100,32 @@ class SecretInventory:
             delete(SecretCoverage).where(SecretCoverage.scan_id == self.scan_id)
         )
         self._cleared = True
+
+    def _load(self) -> None:
+        """Seed the counters from what an earlier pass over this scan wrote."""
+        rows = self.session.execute(
+            select(Secret.id, Secret.fingerprint, Secret.sightings, Secret.hosts).where(
+                Secret.scan_id == self.scan_id
+            )
+        ).all()
+        for secret_id, fingerprint, sightings, hosts in rows:
+            self._ids[fingerprint] = secret_id
+            self._sightings[fingerprint] = int(sightings or 0)
+            self._hosts_floor[fingerprint] = int(hosts or 0)
+            self._hosts[fingerprint] = set()
+        seen = self.session.execute(
+            select(
+                Secret.fingerprint,
+                SecretSighting.url,
+                SecretSighting.source,
+                SecretSighting.host,
+            )
+            .join(Secret, Secret.id == SecretSighting.secret_id)
+            .where(SecretSighting.scan_id == self.scan_id)
+        ).all()
+        for fingerprint, url, source, host in seen:
+            self._seen.add((fingerprint, url, source))
+            self._hosts[fingerprint].add(host)
 
     def write(self, observations: Iterable[Observation]) -> int:
         """Insert what is new, count what is not, and commit."""
@@ -134,6 +164,7 @@ class SecretInventory:
                 rows.append(row)
                 self._ids[obs.fingerprint] = secret_id
                 self._hosts[obs.fingerprint] = set()
+                self._hosts_floor[obs.fingerprint] = 0
                 self._sightings[obs.fingerprint] = 0
             self._hosts[obs.fingerprint].add(obs.host)
             self._sightings[obs.fingerprint] += 1
@@ -167,7 +198,10 @@ class SecretInventory:
             self.session.execute(
                 update(Secret)
                 .where(Secret.id == self._ids[fp])
-                .values(sightings=self._sightings[fp], hosts=len(self._hosts[fp]))
+                .values(
+                    sightings=self._sightings[fp],
+                    hosts=max(self._hosts_floor[fp], len(self._hosts[fp])),
+                )
             )
         self.session.commit()
         for obj in rows:

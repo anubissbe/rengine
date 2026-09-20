@@ -59,12 +59,18 @@ export const GROUP_LABELS: Record<string, string> = {
 
 export enum SecretSource {
 	BODY = 'body',
-	HEADER = 'header'
+	HEADER = 'header',
+	ENDPOINT_BODY = 'endpoint_body',
+	ENDPOINT_HEADER = 'endpoint_header',
+	FINDING = 'finding'
 }
 
 export const SOURCE_LABELS: Record<string, string> = {
-	[SecretSource.BODY]: 'Response body',
-	[SecretSource.HEADER]: 'Response headers'
+	[SecretSource.BODY]: 'Web asset body',
+	[SecretSource.HEADER]: 'Web asset headers',
+	[SecretSource.ENDPOINT_BODY]: 'Endpoint body',
+	[SecretSource.ENDPOINT_HEADER]: 'Endpoint headers',
+	[SecretSource.FINDING]: 'Finding response'
 };
 
 export const DROP_REASON_LABELS: Record<string, string> = {

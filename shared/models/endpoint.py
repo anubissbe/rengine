@@ -107,6 +107,20 @@ class Endpoint(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class EndpointResponse(SQLModel, table=True):
+    """The stored response of one probed endpoint."""
+
+    __tablename__ = "endpoint_responses"
+
+    endpoint_id: uuid.UUID = Field(
+        primary_key=True, foreign_key="endpoints.id", ondelete="CASCADE"
+    )
+    scan_id: uuid.UUID = Field(foreign_key="scans.id", index=True, ondelete="CASCADE")
+    raw_response_header: str | None = _text()
+    response_body: str | None = _text()
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class EndpointCoverage(SQLModel, table=True):
     """One provider's account of what it covered."""
 

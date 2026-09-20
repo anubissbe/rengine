@@ -187,20 +187,24 @@ def ordered_levels() -> list[list[StageSpec]]:
 
 
 def _deferrable(specs: dict[str, StageSpec]) -> set[str]:
-    """Stages nothing waits on, that touch the target and do not opt out."""
+    """Leaves that do not opt out: one that sends traffic, or a passive one past the last awaited level."""
     awaited = {dep for spec in specs.values() for dep in spec.depends_on}
     wanted: set[str] = set()
     for spec in specs.values():
         for other in specs.values():
             if other.name != spec.name and (other.consumes & spec.produces):
                 wanted.add(spec.name)
+    latest = max(
+        (spec.level for name, spec in specs.items() if name in awaited | wanted),
+        default=-1,
+    )
     return {
         name
         for name, spec in specs.items()
         if name not in awaited
         and name not in wanted
-        and spec.touches_target
         and spec.deferrable
+        and (spec.touches_target or spec.level > latest)
     }
 
 

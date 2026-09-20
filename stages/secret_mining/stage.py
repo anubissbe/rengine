@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from shared.definitions.secrets import STAGE_SOURCES
 from shared.definitions.surface import SurfaceDimension
 from shared.enums.scan import AssetKind, Phase, StageGroup, StageRole
 from shared.logging import get_logger
@@ -21,10 +22,10 @@ class SecretMiningStage(Stage):
         "No request is sent."
     )
     phase = Phase.DEPTH.value
-    depends_on = frozenset({"http_probe"})
+    depends_on = frozenset({"http_probe", "endpoint_probe"})
     group = StageGroup.ANALYSIS.value
     role = StageRole.CAPABILITY.value
-    consumes = frozenset({AssetKind.HTTP_ASSETS.value})
+    consumes = frozenset({AssetKind.HTTP_ASSETS.value, AssetKind.ENDPOINTS.value})
     produces = frozenset({AssetKind.SECRETS.value})
     applies_to = ALL_TARGETS
     touches_target = False
@@ -40,6 +41,7 @@ class SecretMiningStage(Stage):
             scan_id=self.ctx.scan_id,
             target_id=self.ctx.target_id,
             project_id=self.ctx.project_id,
+            sources=STAGE_SOURCES,
             aborted=self._aborted,
             on_progress=self.emit_progress,
             announce=lambda: self.publish_results(SurfaceDimension.SECRETS.value),

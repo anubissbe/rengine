@@ -14,12 +14,22 @@ HTTPX_BINARY = "httpx"
 DEFAULT_TIMEOUT = 900
 
 # httpx spells it -H/-header
+HTTPX_ALIASES: dict[str, str] = {
+    "-H": "-header",
+    "-l": "-list",
+    "-o": "-output",
+    "-p": "-ports",
+    "-rl": "-rate-limit",
+    "-t": "-threads",
+    "-sr": "-store-response",
+    "-td": "-tech-detect",
+}
 HEADER_FLAG = "-header"
 
 # without this httpx retries the other scheme when the named one fails
 NO_FALLBACK_FLAG = "-no-fallback-scheme"
 
-_IDLE_FLOOR = 120
+_IDLE_FLOOR = 300
 _IDLE_TIMEOUT_FACTOR = 6
 _CAPTURE_IDLE_FLOOR = 300
 CAPTURE_SECONDS_PER_TARGET = 6
@@ -28,6 +38,7 @@ MAX_CAPTURE_SECONDS = 7200
 _RESPONSE_SIZE_CAP = HTTPX_RESPONSE_CAP
 
 _ENRICH_FLAGS = [
+    "-probe",
     "-status-code",
     "-title",
     "-tech-detect",
@@ -51,6 +62,14 @@ _ENRICH_FLAGS = [
     str(_RESPONSE_SIZE_CAP),
     "-no-color",
 ]
+
+
+def _answered(records: Iterator[dict]) -> Iterator[dict]:
+    """Drop the per-input line -probe emits for a host that did not answer."""
+    for record in records:
+        if record.get("failed"):
+            continue
+        yield record
 
 
 class HttpxError(Exception):
@@ -84,7 +103,9 @@ class HttpxClient:
         self.extra_args = extra_args or []
 
         try:
-            self._runner = CLIToolRunner(HTTPX_BINARY, default_timeout=DEFAULT_TIMEOUT)
+            self._runner = CLIToolRunner(
+                HTTPX_BINARY, default_timeout=DEFAULT_TIMEOUT, aliases=HTTPX_ALIASES
+            )
         except ToolNotFoundError as e:
             raise HttpxError(str(e)) from e
 
@@ -129,6 +150,7 @@ class HttpxClient:
             tool=HTTPX_BINARY,
             extra_args=self.extra_args,
         ) as stream:
+            stream.records = _answered(stream.records)
             yield stream
 
     def _capture_args(self) -> list[str]:

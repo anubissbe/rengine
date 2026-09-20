@@ -312,6 +312,29 @@ _CONTENT_TYPE_CLASS: tuple[tuple[str, str], ...] = (
     ("text/plain", EndpointClass.DATA.value),
 )
 
+_TEXT_CONTENT_TOKENS: tuple[str, ...] = (
+    "text/",
+    "json",
+    "javascript",
+    "ecmascript",
+    "xml",
+    "graphql",
+    "yaml",
+    "x-www-form-urlencoded",
+    "x-ndjson",
+    "x-sh",
+    "x-httpd-php",
+)
+
+
+def keeps_body(content_type: str | None) -> bool:
+    """Whether an endpoint's response body is stored: text-shaped or unstated, never binary."""
+    if not content_type:
+        return True
+    lowered = content_type.lower()
+    return any(token in lowered for token in _TEXT_CONTENT_TOKENS)
+
+
 _API_PATH_RE = re.compile(
     r"(^|/)(api|apis|rest|graphql|graphiql|gql|rpc|jsonrpc|odata|v[0-9]{1,2})(/|$)",
     re.IGNORECASE,

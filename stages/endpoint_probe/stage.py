@@ -31,7 +31,10 @@ from tools.httpx.parser import parse_httpx_record
 
 logger = get_logger(__name__)
 
-_WRITE_BATCH = 500
+_WRITE_BATCH = 200
+
+# only the probe writes the hash
+_UNANSWERED = Endpoint.content_hash.is_(None)
 
 
 def _in_scheme(urls: list[str], scheme: str | None) -> tuple[list[str], int]:
@@ -41,6 +44,20 @@ def _in_scheme(urls: list[str], scheme: str | None) -> tuple[list[str], int]:
     prefix = f"{scheme}://"
     kept = [url for url in urls if url.startswith(prefix)]
     return kept, len(urls) - len(kept)
+
+
+def _progress_line(selected: int, answered: int, removed: int, skipped: int) -> str:
+    return (
+        f"verified {selected} endpoints, {answered} answered"
+        + (f", {removed} removed as noise" if removed else "")
+        + (f", {skipped} left unverified" if skipped else "")
+    )
+
+
+def _refused_note(refused: int) -> str | None:
+    if not refused:
+        return None
+    return f"{refused} responses not stored. The database refused the rows."
 
 
 class EndpointProbeStage(Stage):
@@ -70,7 +87,7 @@ class EndpointProbeStage(Stage):
         pending = self._pending(budget)
         if not pending:
             self._store(started, 0, 0, 0, CoverageStatus.COMPLETED.value, None, None)
-            self.emit_progress("every endpoint carries an observed status")
+            self.emit_progress("every endpoint has answered the probe")
             return StageResult(counts={"endpoints_probed": 0})
 
         selected, off_scheme = _in_scheme(pending, net.probe_scheme)
@@ -90,34 +107,19 @@ class EndpointProbeStage(Stage):
             return StageResult(counts={"endpoints_probed": 0})
 
         try:
-            client = HttpxClient(
-                rate_limit=self.transport.rate,
-                threads=self.transport.threads,
-                timeout=self.transport.timeout,
-                proxy_url=net.proxy_url,
-                headers=net.headers,
-                probe_scheme=net.probe_scheme,
-                follow_redirects=self.follow_redirects(FOLLOW_REDIRECTS),
-                recorder=self.ctx.recorder,
-                extra_args=self.ctx.resolved.tool_args("httpx"),
-            )
+            client = self._client(net)
         except HttpxError as e:
-            self._store(
-                started,
-                unverified,
-                0,
-                skipped,
-                CoverageStatus.SKIPPED.value,
-                str(e)[:2000],
-                None,
-            )
-            logger.warning("httpx unavailable, endpoints stay unverified")
-            return StageResult(counts={"endpoints_probed": 0})
+            return self._unavailable(started, unverified, skipped, e)
+
+        refused = 0
 
         def _write(batch: list[EndpointObservation]) -> int:
-            return endpoint_inventory.verify(
+            nonlocal refused
+            written = endpoint_inventory.verify(
                 self.session, scan_id=self.ctx.scan_id, observations=batch
-            ).updated
+            )
+            refused += written.responses_refused
+            return written.updated
 
         sink = self.results_sink(
             SurfaceDimension.ENDPOINTS.value, _write, rows=_WRITE_BATCH
@@ -150,6 +152,8 @@ class EndpointProbeStage(Stage):
                         content_hash=fields.get("content_hash"),
                         tech=list(fields.get("tech") or []),
                         methods=[fields["method"]] if fields.get("method") else [],
+                        raw_response_header=fields.get("raw_response_header"),
+                        response_body=fields.get("response_body"),
                     )
                 )
         sink.close()
@@ -196,20 +200,45 @@ class EndpointProbeStage(Stage):
             answered=answered,
             dropped=dict(dropped),
         )
-        removed = sum(dropped.values())
         self.emit_progress(
-            f"verified {len(selected)} endpoints, {answered} answered"
-            + (f", {removed} removed as noise" if removed else "")
-            + (f", {skipped} left unverified" if skipped else "")
+            _progress_line(len(selected), answered, sum(dropped.values()), skipped)
         )
         return StageResult(
             counts={"endpoints_probed": len(selected)},
-            warnings=[stall] if stall else [],
-            partial=stalled,
+            warnings=[w for w in (stall, _refused_note(refused)) if w],
+            partial=stalled or bool(refused),
         )
 
+    def _client(self, net) -> HttpxClient:
+        return HttpxClient(
+            rate_limit=self.transport.rate,
+            threads=self.transport.threads,
+            timeout=self.transport.timeout,
+            proxy_url=net.proxy_url,
+            headers=net.headers,
+            probe_scheme=net.probe_scheme,
+            follow_redirects=self.follow_redirects(FOLLOW_REDIRECTS),
+            recorder=self.ctx.recorder,
+            extra_args=self.ctx.resolved.tool_args("httpx"),
+        )
+
+    def _unavailable(
+        self, started, unverified: int, skipped: int, error: HttpxError
+    ) -> StageResult:
+        self._store(
+            started,
+            unverified,
+            0,
+            skipped,
+            CoverageStatus.SKIPPED.value,
+            str(error)[:2000],
+            None,
+        )
+        logger.warning("httpx unavailable, endpoints stay unverified")
+        return StageResult(counts={"endpoints_probed": 0})
+
     def _pending(self, budget: int) -> list[str]:
-        """The unverified endpoints most likely to matter, ranked in the database."""
+        """The endpoints the probe has not answered, ranked in the database, never-seen first."""
         flagged = func.jsonb_array_length(cast(Endpoint.interest, JSONB)) > 0
         novel = (
             func.row_number()
@@ -222,14 +251,12 @@ class EndpointProbeStage(Stage):
         ranked = select(
             Endpoint.url.label("url"),
             Endpoint.path.label("path"),
+            Endpoint.is_probed.label("seen"),
             flagged.label("flagged"),
             (Endpoint.param_count > 0).label("has_params"),
             novel,
             Endpoint.depth.label("depth"),
-        ).where(
-            Endpoint.scan_id == self.ctx.scan_id,
-            Endpoint.is_probed.is_(False),
-        )
+        ).where(Endpoint.scan_id == self.ctx.scan_id, _UNANSWERED)
         if self.cfg.skip_static:
             ranked = ranked.where(Endpoint.endpoint_class.notin_(tuple(STATIC_CLASSES)))
         sub = ranked.subquery()
@@ -239,6 +266,7 @@ class EndpointProbeStage(Stage):
         rows = self.session.execute(
             select(sub.c.url, sub.c.path)
             .order_by(
+                sub.c.seen.asc(),
                 sub.c.flagged.desc(),
                 sub.c.has_params.desc(),
                 (sub.c.in_family == 1).desc(),
@@ -285,8 +313,7 @@ class EndpointProbeStage(Stage):
 
     def _unverified(self) -> int:
         q = select(func.count()).where(
-            Endpoint.scan_id == self.ctx.scan_id,
-            Endpoint.is_probed.is_(False),
+            Endpoint.scan_id == self.ctx.scan_id, _UNANSWERED
         )
         if self.cfg.skip_static:
             q = q.where(Endpoint.endpoint_class.notin_(tuple(STATIC_CLASSES)))

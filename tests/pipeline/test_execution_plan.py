@@ -122,4 +122,15 @@ def test_a_deferred_stage_waits_for_the_deferred_stages_it_depends_on():
     before = _before(plan)
     assert "endpoint_probe" in before["dast_scan"]
     assert "vulnerability_scan" in before["dast_scan"]
-    assert plan[-1] == ("dast_scan",)
+    assert "dast_scan" in plan[-1]
+    assert "vulnerability_scan" not in plan[-1]
+
+
+def test_a_passive_leaf_past_the_last_awaited_level_opens_no_step_of_its_own():
+    plan = execution_plan()
+    before = _before(plan)
+    assert "endpoint_probe" in before["secret_mining"]
+    assert "secret_mining" in plan[-1]
+    assert "vulnerability_scan" not in before["screenshot"], (
+        "a step added for the miner alone would hold the deferred stages behind nuclei"
+    )

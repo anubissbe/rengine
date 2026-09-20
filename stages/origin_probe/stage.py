@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 from sqlalchemy import select
 
 from shared.definitions.intensity import TransportTool
@@ -23,6 +25,8 @@ from tools.httpx.parser import parse_httpx_record
 logger = get_logger(__name__)
 
 _WRITE_BATCH = 200
+_SHUFFLE_SEED = 1
+_PROBE_CHUNK = 500
 
 _HTTP_FIELDS = set(HttpAsset.model_fields)
 
@@ -69,12 +73,21 @@ class OriginProbeStage(Stage):
             return StageResult(warnings=[str(exc)], partial=True)
 
         self.emit_progress(f"requesting {len(targets)} addresses without a hostname")
-        with client.stream_probe(targets) as stream:
-            answered, rejected = self._persist(stream.records)
+        stalled = [False]
+
+        def _chunked():
+            for start in range(0, len(targets), _PROBE_CHUNK):
+                self._check_abort()
+                chunk = targets[start : start + _PROBE_CHUNK]
+                with client.stream_probe(chunk) as stream:
+                    yield from stream.records
+                    stalled[0] = stalled[0] or stream.timed_out
+
+        answered, rejected = self._persist(_chunked())
         self.emit_progress(f"{answered} of {len(targets)} answered by address alone")
         exposed = self._record_exposure()
         warnings = []
-        if stream.timed_out:
+        if stalled[0]:
             warnings.append(
                 f"httpx stalled and was stopped. {len(targets):,} addresses queued."
             )
@@ -135,6 +148,7 @@ class OriginProbeStage(Stage):
                 :MAX_PORTS_PER_ADDRESS
             ]
             targets.extend(host_port(ip, port) for port in ports)
+        random.Random(_SHUFFLE_SEED).shuffle(targets)  # noqa: S311
         return targets
 
     def _persist(self, records) -> tuple[int, int]:

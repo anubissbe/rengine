@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from shared.definitions.retention import (
@@ -21,10 +21,12 @@ from shared.definitions.retention import (
 from shared.enums.scan import SCAN_TERMINAL_STATUSES
 from shared.logging import get_logger
 from shared.models.activity_log import ActivityLog
+from shared.models.endpoint import EndpointResponse
 from shared.models.http_asset import HttpAsset
 from shared.models.instance_settings import InstanceSettings
 from shared.models.scan import Scan
 from shared.models.subdomain import Subdomain
+from shared.services.scan_scope import census_only
 from shared.utils.datetime import utc_now
 
 logger = get_logger(__name__)
@@ -59,22 +61,26 @@ def _settings(session: Session) -> InstanceSettings | None:
 
 
 def _newest_per_target(session: Session) -> set[UUID]:
-    """The most recent terminal scan of every target."""
-    newest = (
-        select(Scan.target_id, func.max(Scan.created_at).label("at"))
-        .where(Scan.status.in_(SCAN_TERMINAL_STATUSES))
-        .group_by(Scan.target_id)
-        .subquery()
-    )
-    rows = session.execute(
-        select(Scan.id)
-        .join(
-            newest,
-            (Scan.target_id == newest.c.target_id) & (Scan.created_at == newest.c.at),
+    """The most recent terminal scan of every target, and its most recent census run."""
+    kept: set[UUID] = set()
+    for conds in ((), (census_only(),)):
+        newest = (
+            select(Scan.target_id, func.max(Scan.created_at).label("at"))
+            .where(Scan.status.in_(SCAN_TERMINAL_STATUSES), *conds)
+            .group_by(Scan.target_id)
+            .subquery()
         )
-        .where(Scan.status.in_(SCAN_TERMINAL_STATUSES))
-    ).scalars()
-    return set(rows)
+        rows = session.execute(
+            select(Scan.id)
+            .join(
+                newest,
+                (Scan.target_id == newest.c.target_id)
+                & (Scan.created_at == newest.c.at),
+            )
+            .where(Scan.status.in_(SCAN_TERMINAL_STATUSES), *conds)
+        ).scalars()
+        kept.update(rows)
+    return kept
 
 
 def _expired_scans(session: Session, days: int) -> list[UUID]:
@@ -122,7 +128,10 @@ def _forget_bodies(session: Session, scan_id: UUID) -> int:
         .where(HttpAsset.scan_id == scan_id, HttpAsset.response_body.isnot(None))
         .values(response_body=None)
     )
-    return result.rowcount or 0
+    responses = session.execute(
+        delete(EndpointResponse).where(EndpointResponse.scan_id == scan_id)
+    )
+    return (result.rowcount or 0) + (responses.rowcount or 0)
 
 
 @dataclass

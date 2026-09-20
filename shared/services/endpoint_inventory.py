@@ -16,12 +16,13 @@ from shared.definitions.endpoints import (
     classify,
     coerce_source,
     interests_for,
+    keeps_body,
     parse_url,
     shape_for,
     source_rank,
 )
 from shared.logging import get_logger
-from shared.models.endpoint import Endpoint
+from shared.models.endpoint import Endpoint, EndpointResponse
 from shared.models.http_asset import HttpAsset
 from shared.models.subdomain import Subdomain
 from shared.services.endpoint_noise import NoisePolicy, Sifter
@@ -57,6 +58,8 @@ class EndpointObservation:
     redirect_location: str | None = None
     content_hash: str | None = None
     tech: list[str] = field(default_factory=list)
+    raw_response_header: str | None = None
+    response_body: str | None = None
 
 
 @dataclass
@@ -65,6 +68,7 @@ class UpsertResult:
     updated: int = 0
     rejected: int = 0
     seen: int = 0
+    responses_refused: int = 0
     dropped: dict[str, int] = field(default_factory=dict)
 
     def add(self, other: UpsertResult) -> None:
@@ -72,6 +76,7 @@ class UpsertResult:
         self.updated += other.updated
         self.rejected += other.rejected
         self.seen += other.seen
+        self.responses_refused += other.responses_refused
         for rule, count in other.dropped.items():
             self.dropped[rule] = self.dropped.get(rule, 0) + count
 
@@ -140,6 +145,8 @@ class _Merged:
     redirect_location: str | None = None
     content_hash: str | None = None
     tech: list[str] = field(default_factory=list)
+    raw_response_header: str | None = None
+    response_body: str | None = None
 
     def add_sample(self, values: dict[str, str]) -> None:
         if not values or values in self.samples:
@@ -172,6 +179,8 @@ class _Merged:
             "response_time",
             "redirect_location",
             "content_hash",
+            "raw_response_header",
+            "response_body",
         ):
             value = getattr(obs, field_)
             if value is not None:
@@ -520,11 +529,15 @@ def verify(
             .all()
         )
         payload: list[dict] = []
+        responses: list[dict] = []
         for row in rows:
             merged = folded[row.signature]
             if not merged.is_probed:
                 continue
             klass = classify(merged.path, merged.extension, merged.content_type)
+            response = _response_row(row.id, scan_id, merged)
+            if response is not None:
+                responses.append(response)
             payload.append(
                 {
                     "id": row.id,
@@ -552,8 +565,59 @@ def verify(
         if payload:
             session.execute(update(Endpoint), payload)
             result.updated += len(payload)
+        result.responses_refused += _store_responses(session, responses)
     session.commit()
     return result
+
+
+def _response_row(
+    endpoint_id: uuid.UUID, scan_id: uuid.UUID, merged: _Merged
+) -> dict | None:
+    body = merged.response_body if keeps_body(merged.content_type) else None
+    header = merged.raw_response_header
+    if not body and not header:
+        return None
+    return {
+        "endpoint_id": endpoint_id,
+        "scan_id": scan_id,
+        "raw_response_header": header or None,
+        "response_body": body or None,
+        "created_at": utc_now(),
+    }
+
+
+def _store_responses(session: Session, rows: list[dict]) -> int:
+    """Upsert the stored responses in key order. A refused row is dropped and counted."""
+    if not rows:
+        return 0
+    rows.sort(key=lambda r: r["endpoint_id"])
+    try:
+        with session.begin_nested():
+            session.execute(_response_upsert(rows))
+        return 0
+    except REFUSED_ROW:
+        logger.warning("response batch refused, retrying row by row")
+    refused = 0
+    for row in rows:
+        try:
+            with session.begin_nested():
+                session.execute(_response_upsert([row]))
+        except REFUSED_ROW:
+            refused += 1
+    return refused
+
+
+def _response_upsert(rows: list[dict]):
+    stmt = insert(EndpointResponse).values(rows)
+    return stmt.on_conflict_do_update(
+        index_elements=[EndpointResponse.endpoint_id],
+        set_={
+            "scan_id": stmt.excluded.scan_id,
+            "raw_response_header": stmt.excluded.raw_response_header,
+            "response_body": stmt.excluded.response_body,
+            "created_at": stmt.excluded.created_at,
+        },
+    )
 
 
 def seed_from_assets(

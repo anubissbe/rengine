@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable
 
 from sqlalchemy import bindparam, delete, select, update
@@ -38,6 +39,8 @@ logger = get_logger(__name__)
 
 _IP_FAMILY = {TargetType.IP.value, TargetType.IP_RANGE.value, TargetType.ASN.value}
 _MAX_TARGETS = 50000
+_SHUFFLE_SEED = 1
+_PROBE_CHUNK = 500
 _WEB_CAPABLE = (ServiceClass.WEB.value, ServiceClass.OTHER.value)
 _PERSIST_BATCH = 500
 _PERSIST_SECONDS = 2.0
@@ -124,9 +127,17 @@ class HttpProbeStage(Stage):
             logger.warning("httpx unavailable, skipping HTTP probe")
             return StageResult(warnings=[str(exc)], partial=True)
 
-        with client.stream_probe(targets) as stream:
-            self._check_abort()
-            count, rejected = self._persist(stream.records)
+        stalled = [False]
+
+        def _chunked() -> Iterable[dict]:
+            for start in range(0, len(targets), _PROBE_CHUNK):
+                self._check_abort()
+                chunk = targets[start : start + _PROBE_CHUNK]
+                with client.stream_probe(chunk) as stream:
+                    yield from stream.records
+                    stalled[0] = stalled[0] or stream.timed_out
+
+        count, rejected = self._persist(_chunked())
         services = self._record_services()
         if self.ctx.target_type == TargetType.DOMAIN.value:
             self._denormalize_to_subdomains()
@@ -136,7 +147,7 @@ class HttpProbeStage(Stage):
             f"probed {len(targets)} host and port pairs, {count} answered HTTP"
         )
         warnings = []
-        if stream.timed_out:
+        if stalled[0]:
             warnings.append(
                 f"httpx stalled and was stopped. {len(targets):,} host and port "
                 f"pairs were queued, {count:,} answered."
@@ -210,7 +221,9 @@ class HttpProbeStage(Stage):
                 targets.extend(
                     host_port(ip, port) for port in self._ports_for([ip], port_map)
                 )
-        return list(dict.fromkeys(targets))[:_MAX_TARGETS]
+        unique = list(dict.fromkeys(targets))
+        random.Random(_SHUFFLE_SEED).shuffle(unique)  # noqa: S311
+        return unique[:_MAX_TARGETS]
 
     def _record_services(self) -> int:
         """Fold every live HTTP response back onto its port."""

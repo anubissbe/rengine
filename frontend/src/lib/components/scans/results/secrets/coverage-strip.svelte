@@ -82,6 +82,21 @@
 							</div>
 						{/each}
 					</dl>
+					{#if coverage.rows.length > 1}
+						<div
+							class="border-t px-3 py-1.5 text-2xs tracking-wide text-muted-foreground uppercase"
+						>
+							Sources
+						</div>
+						<dl class="divide-y">
+							{#each coverage.rows as row (row.source)}
+								<div class="flex items-center justify-between gap-3 px-3 py-1.5 text-xs">
+									<dt class="text-muted-foreground">{row.source_label}</dt>
+									<dd class="font-mono tabular-nums">{n(row.documents_read)}</dd>
+								</div>
+							{/each}
+						</dl>
+					{/if}
 					{#if drops.length}
 						<div
 							class="border-t px-3 py-1.5 text-2xs tracking-wide text-muted-foreground uppercase"

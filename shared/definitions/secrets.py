@@ -72,21 +72,38 @@ STATE_TONES: dict[str, str] = {
 class SecretSource(StrEnum):
     BODY = "body"
     HEADER = "header"
+    ENDPOINT_BODY = "endpoint_body"
+    ENDPOINT_HEADER = "endpoint_header"
+    FINDING = "finding"
 
 
 SOURCE_LABELS: dict[str, str] = {
-    SecretSource.BODY.value: "Response body",
-    SecretSource.HEADER.value: "Response headers",
+    SecretSource.BODY.value: "Web asset body",
+    SecretSource.HEADER.value: "Web asset headers",
+    SecretSource.ENDPOINT_BODY.value: "Endpoint body",
+    SecretSource.ENDPOINT_HEADER.value: "Endpoint headers",
+    SecretSource.FINDING.value: "Finding response",
 }
 
 
 class MinerSource(StrEnum):
-    STORED_RESPONSES = "stored_responses"
+    WEB_ASSET_RESPONSES = "web_asset_responses"
+    ENDPOINT_RESPONSES = "endpoint_responses"
+    FINDING_RESPONSES = "finding_responses"
 
 
 MINER_SOURCE_LABELS: dict[str, str] = {
-    MinerSource.STORED_RESPONSES.value: "Stored responses",
+    MinerSource.WEB_ASSET_RESPONSES.value: "Web asset responses",
+    MinerSource.ENDPOINT_RESPONSES.value: "Endpoint responses",
+    MinerSource.FINDING_RESPONSES.value: "Finding responses",
 }
+
+STAGE_SOURCES: tuple[str, ...] = (
+    MinerSource.WEB_ASSET_RESPONSES.value,
+    MinerSource.ENDPOINT_RESPONSES.value,
+)
+FINALIZE_SOURCES: tuple[str, ...] = (MinerSource.FINDING_RESPONSES.value,)
+ALL_SOURCES: tuple[str, ...] = tuple(m.value for m in MinerSource)
 
 
 class DropReason(StrEnum):
@@ -655,6 +672,7 @@ FILE_EXTENSIONS: frozenset[str] = frozenset(
 TEMPLATE_MARKS: tuple[str, ...] = ("{{", "${", "<%", "%7b", "[[", "{%")
 
 __all__ = [
+    "ALL_SOURCES",
     "BACKFILL_SCANS_PER_TICK",
     "BODY_CAP_BYTES",
     "CONTEXT_RADIUS",
@@ -665,6 +683,7 @@ __all__ = [
     "DROP_REASON_LABELS",
     "EXAMPLE_DOMAINS",
     "FILE_EXTENSIONS",
+    "FINALIZE_SOURCES",
     "GROUP_LABELS",
     "GROUP_ORDER",
     "MAX_CONTEXT_LENGTH",
@@ -679,6 +698,7 @@ __all__ = [
     "PLACEHOLDER_MARKS",
     "PLACEHOLDER_PASSWORDS",
     "SOURCE_LABELS",
+    "STAGE_SOURCES",
     "STATE_LABELS",
     "STATE_ORDER",
     "STATE_TONES",
