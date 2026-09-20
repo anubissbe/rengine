@@ -17,8 +17,8 @@ from shared.definitions.vulnerabilities import (
     coerce_severity,
     is_kev,
 )
-from shared.utils.net import url_port
-from shared.utils.text import strip_control
+from shared.utils.net import split_host_port, url_port
+from shared.utils.text import scrub, strip_control
 
 _PROTOCOL_ALIASES = {
     "tcp": Protocol.NETWORK.value,
@@ -147,9 +147,8 @@ def _hostname(candidate: str | None) -> str | None:
         parts = _split(value)
         return (parts.hostname or None) if parts else None
     head = value.split("/", 1)[0]
-    if head.count(":") == 1:
-        head = head.split(":", 1)[0]
-    return head or None
+    host, _port = split_host_port(head)
+    return host or None
 
 
 def _port_of(record: dict, url: str | None) -> int | None:
@@ -160,9 +159,29 @@ def _port_of(record: dict, url: str | None) -> int | None:
     if parts is not None and (port := _declared_port(parts)) is not None:
         return port
     host = record.get("host") or ""
-    if isinstance(host, str) and host.count(":") == 1:
-        return _as_int(host.rsplit(":", 1)[1])
+    if isinstance(host, str) and host:
+        _host, declared = split_host_port(host.split("/", 1)[0])
+        return _as_int(declared)
     return None
+
+
+def _without_query(value: str) -> str:
+    parts = _split(value)
+    if parts is None:
+        return value
+    return parts._replace(query="", fragment="").geturl()
+
+
+def _locator(record: dict, url: str | None, matched_at: str, interaction) -> str:
+    """The finding's location without the payload."""
+    base = url or matched_at
+    if record.get("is_fuzzing_result"):
+        position = _as_text(record.get("fuzzing_position"), 40) or ""
+        parameter = _as_text(record.get("fuzzing_parameter"), 200) or ""
+        return f"{_without_query(base)}#{position}:{parameter}"
+    if interaction:
+        return _without_query(base)
+    return matched_at
 
 
 def parse_finding(record: dict, scanner: str = Scanner.NUCLEI.value) -> Finding | None:
@@ -187,9 +206,15 @@ def parse_finding(record: dict, scanner: str = Scanner.NUCLEI.value) -> Finding 
     raw_type = (_as_text(record.get("type")) or "").lower()
     tags = _as_list(info.get("tags"))[:60]
     matcher = _as_text(record.get("matcher-name"), 200)
+    interaction = record.get("interaction") or {}
 
     return Finding(
-        fingerprint=fingerprint(scanner, template_id, matcher, matched_at),
+        fingerprint=fingerprint(
+            scanner,
+            template_id,
+            matcher,
+            _locator(record, url, matched_at, interaction),
+        ),
         scanner=scanner,
         template_id=template_id,
         template_name=_as_text(info.get("name"), 500) or template_id,
@@ -216,7 +241,8 @@ def parse_finding(record: dict, scanner: str = Scanner.NUCLEI.value) -> Finding 
         cpe=_as_text(classification.get("cpe"), 300),
         is_kev=is_kev(tags),
         matched_at=matched_at,
-        host=_hostname(record.get("host")) or _hostname(matched_at),
+        host=(_hostname(record.get("host")) or _hostname(matched_at) or "")[:500]
+        or None,
         ip=_as_text(record.get("ip"), 45),
         port=_port_of(record, url),
         scheme=_as_text(record.get("scheme"), 16),
@@ -225,9 +251,13 @@ def parse_finding(record: dict, scanner: str = Scanner.NUCLEI.value) -> Finding 
         request=_as_text(record.get("request"), MAX_EVIDENCE_BYTES),
         response=_as_text(record.get("response"), MAX_EVIDENCE_BYTES),
         curl_command=_as_text(record.get("curl-command"), MAX_EVIDENCE_BYTES),
-        interaction=record.get("interaction") or {},
-        extra={
-            k: v for k, v in metadata.items() if isinstance(v, (str, int, float, bool))
-        },
+        interaction=scrub(interaction) if isinstance(interaction, dict) else {},
+        extra=scrub(
+            {
+                k: v
+                for k, v in metadata.items()
+                if isinstance(v, (str, int, float, bool))
+            }
+        ),
         observed_at=_timestamp(record.get("timestamp")),
     )

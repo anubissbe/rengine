@@ -183,6 +183,7 @@ export interface ScanCreate {
 	target_value?: string | null;
 	overrides?: StageOverrides;
 	intensity?: string | null;
+	new_checks?: boolean | null;
 }
 
 export const MAX_SCAN_BATCH = 500;
@@ -194,6 +195,7 @@ export interface ScanBatchCreate {
 	target_values?: string[];
 	overrides?: StageOverrides;
 	intensity?: string | null;
+	new_checks?: boolean | null;
 }
 
 export const PREVIEW_TOOL_STATUSES = [

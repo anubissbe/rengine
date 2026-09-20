@@ -67,7 +67,8 @@ function createTargetsStore() {
 		expiring: 0,
 		attention: 0,
 		awaiting: 0,
-		enriched: 0
+		enriched: 0,
+		monitored: 0
 	});
 
 	let searchDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -493,7 +494,14 @@ function createTargetsStore() {
 				totalItems: 0,
 				totalPages: 0
 			};
-			signalSummary = { total: 0, expiring: 0, attention: 0, awaiting: 0, enriched: 0 };
+			signalSummary = {
+				total: 0,
+				expiring: 0,
+				attention: 0,
+				awaiting: 0,
+				enriched: 0,
+				monitored: 0
+			};
 			error = null;
 			hasFetched = false;
 		}

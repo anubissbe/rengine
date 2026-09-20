@@ -11,8 +11,13 @@ from shared.definitions.vulnerabilities import (
 )
 from shared.services.vuln_templates import _extract
 from stages.vulnerability_scan.scanners.base import Coverage
-from stages.vulnerability_scan.scanners.nuclei import _note_gaps, _unloaded
+from stages.vulnerability_scan.scanners.nuclei import (
+    _note_gaps,
+    _unloaded,
+    _unloaded_row,
+)
 from tools.nuclei.client import _drop_record
+from tools.nuclei.parser import parse_finding
 
 pytestmark = pytest.mark.pipeline
 
@@ -42,20 +47,24 @@ def test_unloaded_counts_only_a_real_shortfall(selected, loaded, expected) -> No
     assert _unloaded(coverage) == expected
 
 
-def test_unloaded_checks_are_reported_as_partial() -> None:
+def test_unloaded_checks_are_reported_once_for_the_run() -> None:
     coverage = Coverage(group="Standard rate")
     coverage.templates_selected = 6218
     coverage.templates_loaded = 6170
-    _note_gaps(coverage, missing=0, budget_hit=False)
-    assert coverage.status == "partial"
-    assert "48 selected checks did not load" in (coverage.error or "")
+    _note_gaps(coverage, budget_hit=False)
+    assert coverage.status == "completed"
+    assert coverage.error is None
+    row = _unloaded_row(_unloaded(coverage))
+    assert row.status == "skipped"
+    assert row.group == "Library"
+    assert "48 selected checks did not load" in (row.error or "")
 
 
 def test_a_full_load_reports_nothing() -> None:
     coverage = Coverage(group="Standard rate")
     coverage.templates_selected = 6182
     coverage.templates_loaded = 6182
-    _note_gaps(coverage, missing=0, budget_hit=False)
+    _note_gaps(coverage, budget_hit=False)
     assert coverage.error is None
 
 
@@ -76,6 +85,17 @@ def test_an_unresponsive_host_still_parses() -> None:
     record = _drop_record(line)
     assert record is not None
     assert record["host"] == "127.0.0.1:1"
+
+
+def test_a_host_skipped_after_repeated_errors_is_a_drop() -> None:
+    line = (
+        "[INF] Skipped example.com:443 from target list as found unresponsive 30 times"
+    )
+    record = _drop_record(line)
+    assert record == {
+        "host": "example.com:443",
+        "reason": "unresponsive 30 times in a row",
+    }
 
 
 def test_an_unrelated_line_is_not_a_drop() -> None:
@@ -109,3 +129,55 @@ def test_payload_files_are_extracted_beside_the_checks(tmp_path) -> None:
     assert (destination / "helpers/payloads/citrix_paddings.txt").is_file()
     assert not (destination / "workflows").exists()
     assert not (destination / "profiles").exists()
+
+
+def test_a_fuzzing_finding_is_keyed_without_its_payload() -> None:
+    base = {
+        "template-id": "xss-reflect",
+        "info": {"name": "x", "severity": "medium", "tags": ["dast"]},
+        "url": "https://a.example/search?q=hello",
+        "is_fuzzing_result": True,
+        "fuzzing_parameter": "q",
+        "fuzzing_position": "query",
+        "matcher-name": "body",
+    }
+    one = parse_finding(
+        {**base, "matched-at": "https://a.example/search?q=%3Cscript%3E1"}
+    )
+    two = parse_finding({**base, "matched-at": "https://a.example/search?q=%3Cimg%3E2"})
+    assert one is not None
+    assert two is not None
+    assert one.fingerprint == two.fingerprint
+    assert one.matched_at != two.matched_at
+
+
+def test_an_oast_finding_is_keyed_without_the_callback_url() -> None:
+    base = {
+        "template-id": "blind-ssrf",
+        "info": {"name": "x", "severity": "high", "tags": ["oast"]},
+        "url": "https://a.example/fetch?u=http://aaa.oast.pro",
+        "matcher-name": "dns",
+        "interaction": {"protocol": "dns"},
+    }
+    one = parse_finding(
+        {**base, "matched-at": "https://a.example/fetch?u=http://aaa.oast.pro"}
+    )
+    two = parse_finding(
+        {**base, "matched-at": "https://a.example/fetch?u=http://bbb.oast.pro"}
+    )
+    assert one is not None
+    assert two is not None
+    assert one.fingerprint == two.fingerprint
+
+
+def test_a_long_host_is_capped_to_the_column() -> None:
+    record = {
+        "template-id": "t",
+        "info": {"name": "x", "severity": "low"},
+        "matched-at": "a" * 1800,
+        "interaction": {"raw": "x\x00y"},
+    }
+    finding = parse_finding(record)
+    assert finding is not None
+    assert len(finding.host or "") <= 500
+    assert "\x00" not in str(finding.interaction)

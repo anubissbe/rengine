@@ -31,6 +31,7 @@ from shared.definitions.bounty_programs import (
     ScopeState,
     event_spec,
 )
+from shared.definitions.new_checks import NEW_CHECKS_KEY
 from shared.definitions.ports import SENSITIVE_PORTS
 from shared.definitions.secrets import DETECTOR_LABELS
 from shared.definitions.vulnerabilities import (
@@ -65,7 +66,7 @@ from shared.definitions.whats_new import (
     SubjectKind,
     mark_key,
 )
-from shared.enums.scan import SCAN_TERMINAL_STATUSES, ScanStatus
+from shared.enums.scan import SCAN_TERMINAL_STATUSES, ScanScope, ScanStatus
 from shared.models.bounty_program import BountyEventRow, BountyProgram, BountyScope
 from shared.models.port import Port
 from shared.models.scan import Scan
@@ -177,6 +178,7 @@ class _Groups:
         self.daily: dict[str, dict[str, int]] = defaultdict(dict)
         self.first_runs = 0
         self.visual = 0
+        self.new_checks = 0
 
     def group(self, gid: str, subject: NewSubject, at: datetime) -> NewGroup:
         g = self.by_id.get(gid)
@@ -280,6 +282,9 @@ class WhatsNewService:
             q,
             rows,
         )
+        await self._follow_ups(
+            out, project_id, cutoff, until, target_ids, wanted, q, rows
+        )
         out.visual = await self._visual_count(project_id, cutoff, until, target_ids, q)
         if bounty:
             await self._bounty(
@@ -316,6 +321,7 @@ class WhatsNewService:
             truncated=truncated,
             first_runs=out.first_runs,
             visual=out.visual,
+            new_checks=out.new_checks,
         )
 
     @staticmethod
@@ -759,6 +765,87 @@ class WhatsNewService:
                 facts[Fact.KEV.value] = int(row[3])
             out[row[0]] = (int(row[1]), facts)
         return out
+
+    async def _follow_ups(
+        self,
+        out: _Groups,
+        project_id: UUID,
+        since: datetime,
+        until: datetime | None,
+        target_ids,
+        wanted: set[str],
+        q: str | None,
+        rows: bool,
+    ) -> None:
+        """Runs that tested the web assets with the checks the library gained."""
+        if NewKind.FINDING.value not in wanted:
+            return
+        conds = [
+            Scan.project_id == project_id,
+            Scan.scope == ScanScope.FOCUSED.value,
+            cast(Scan.execution_config, JSONB).has_key(NEW_CHECKS_KEY),
+            Scan.completed_at.isnot(None),
+            Scan.completed_at >= since,
+        ]
+        if until is not None:
+            conds.append(Scan.completed_at <= until)
+        if target_ids is not None:
+            conds.append(Scan.target_id.in_(target_ids))
+        scans = (await self.session.execute(select(Scan).where(*conds))).scalars().all()
+        if not scans:
+            return
+        targets = {
+            t.id: t
+            for t in (
+                await self.session.execute(
+                    select(Target).where(Target.id.in_({s.target_id for s in scans}))
+                )
+            )
+            .scalars()
+            .all()
+        }
+        for scan in scans:
+            target = targets.get(scan.target_id)
+            if target is None:
+                continue
+            found = [Vulnerability.scan_id == scan.id, not_(_suppressed())]
+            if q:
+                needle = f"%{q}%"
+                found.append(
+                    or_(
+                        Vulnerability.template_name.ilike(needle),
+                        Vulnerability.host.ilike(needle),
+                    )
+                )
+            total = int(
+                await self.session.scalar(
+                    select(func.count()).select_from(Vulnerability).where(*found)
+                )
+                or 0
+            )
+            if not total:
+                continue
+            g = self._run_group(out, scan, target)
+            g.run_label = scan.engine_name
+            items: list[NewItem] = []
+            if rows:
+                listed = (
+                    await self.session.execute(
+                        select(Vulnerability)
+                        .where(*found)
+                        .order_by(
+                            _severity_rank(),
+                            Vulnerability.discovered_at.desc(),
+                            Vulnerability.template_name,
+                        )
+                        .limit(ROWS_PER_SECTION)
+                    )
+                ).scalars()
+                items = [self._finding(v, target) for v in listed]
+            out.section(g, NewKind.FINDING.value, total, items)
+            out.count(NewKind.FINDING.value, total)
+            out.day(NewKind.FINDING.value, scan.completed_at.date(), total)
+            out.new_checks += total
 
     def _run_group(self, out: _Groups, scan: Scan, target: Target) -> NewGroup:
         at = scan.started_at or scan.created_at

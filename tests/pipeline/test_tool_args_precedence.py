@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.nuclei.client import NUCLEI_ALIASES
 from tools.runner.executor import merge_extra_args
 
 pytestmark = pytest.mark.pipeline
@@ -33,3 +34,17 @@ def test_a_boolean_flag_does_not_swallow_the_next_flag():
 def test_unrelated_flags_pass_through_in_order():
     extra = ["-stats", "-si", "5", "-tags", "cve"]
     assert merge_extra_args(["-rate-limit", "5"], extra) == extra
+
+
+def test_a_short_spelling_cannot_restate_a_long_flag():
+    stage = ["-rate-limit", "150", "-list", "/run/gen.txt", "-max-host-error", "30"]
+    extra = ["-rl", "9999", "-l", "/run/mine.txt", "-mhe", "0", "-j", "-stats"]
+    assert merge_extra_args(stage, extra, ("-list", "-jsonl"), NUCLEI_ALIASES) == [
+        "-stats"
+    ]
+
+
+def test_the_reserved_set_covers_the_short_spelling_too():
+    assert merge_extra_args(
+        [], ["-l", "x", "-o", "y", "-tags", "cve"], ("-list", "-output"), NUCLEI_ALIASES
+    ) == ["-tags", "cve"]

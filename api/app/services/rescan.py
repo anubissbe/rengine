@@ -7,11 +7,13 @@ import uuid
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import cast, false, func, not_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.scan import ScanService
 from app.services.seed_selection import SeedSelectionService
+from shared.definitions.new_checks import NEW_CHECKS_KEY
 from shared.definitions.rescan import (
     MAX_RUN_ASSETS,
     MAX_RUN_SCANS,
@@ -187,6 +189,14 @@ class RescanService:
                     .where(
                         Scan.parent_scan_id == parent_scan_id,
                         Scan.project_id == project_id,
+                        not_(
+                            func.coalesce(
+                                cast(Scan.execution_config, JSONB).has_key(
+                                    NEW_CHECKS_KEY
+                                ),
+                                false(),
+                            )
+                        ),
                     )
                     .order_by(Scan.created_at.desc())
                     .limit(_MAX_RUNS)

@@ -6,6 +6,7 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Loader from '@lucide/svelte/icons/loader';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import FlaskConical from '@lucide/svelte/icons/flask-conical';
 
 	interface Props {
 		summary: TargetSummary;
@@ -62,6 +63,14 @@
 			label: 'Enriched',
 			value: summary.enriched,
 			icon: ShieldCheck,
+			accent: 'text-foreground',
+			activeRing: 'ring-primary/40 border-primary/40 bg-primary/5'
+		},
+		{
+			signal: 'monitored',
+			label: 'New checks',
+			value: summary.monitored,
+			icon: FlaskConical,
 			accent: 'text-foreground',
 			activeRing: 'ring-primary/40 border-primary/40 bg-primary/5'
 		}

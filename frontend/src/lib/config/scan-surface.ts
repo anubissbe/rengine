@@ -22,6 +22,7 @@ export enum DropReason {
 	COVERED_BY_ORIGIN = 'covered_by_origin',
 	NO_ANSWER = 'no_answer',
 	CANARY_MATCH = 'canary_match',
+	CDN_EDGE = 'cdn_edge',
 	BUDGET = 'budget',
 	OVER_CAP = 'over_cap'
 }
@@ -32,6 +33,7 @@ export const DROP_REASON_LABELS: Record<string, string> = {
 	[DropReason.COVERED_BY_ORIGIN]: 'Covered by an equivalent web asset',
 	[DropReason.NO_ANSWER]: 'Did not answer',
 	[DropReason.CANARY_MATCH]: 'Answers like a missing page',
+	[DropReason.CDN_EDGE]: 'CDN edge address, not the origin',
 	[DropReason.BUDGET]: 'Not reached within the time budget',
 	[DropReason.OVER_CAP]: 'Over the target budget'
 };
@@ -63,6 +65,7 @@ export enum Tier {
 	UNIVERSAL = 'universal',
 	MATCHED = 'matched',
 	BLIND = 'blind',
+	DEEP = 'deep',
 	SERVICES = 'services',
 	NAMES = 'names',
 	REPLAY = 'replay',
@@ -77,6 +80,7 @@ export const TIER_ORDER: string[] = [
 	Tier.NAMES,
 	Tier.MATCHED,
 	Tier.BLIND,
+	Tier.DEEP,
 	Tier.REPLAY,
 	Tier.DAST,
 	Tier.BASES
@@ -86,7 +90,8 @@ export const TIER_LABELS: Record<string, string> = {
 	[Tier.ONE_REQUEST]: 'One-request checks',
 	[Tier.UNIVERSAL]: 'Universal checks',
 	[Tier.MATCHED]: 'Checks for detected software',
-	[Tier.BLIND]: 'Remaining checks',
+	[Tier.BLIND]: 'Known-exploited sweep',
+	[Tier.DEEP]: 'Remaining checks',
 	[Tier.SERVICES]: 'TLS and network checks',
 	[Tier.NAMES]: 'DNS checks',
 	[Tier.REPLAY]: 'Confirmation on equivalent web assets',
@@ -98,7 +103,10 @@ export const TIER_HELP: Record<string, string> = {
 	[Tier.ONE_REQUEST]: 'Root-page checks on every web asset. At most ten requests each.',
 	[Tier.UNIVERSAL]: 'Checks for any web server. One web asset per origin.',
 	[Tier.MATCHED]: 'Checks for the software the web asset was seen running.',
-	[Tier.BLIND]: 'Checks for software not detected on the web asset. Runs last.',
+	[Tier.BLIND]:
+		'Known-exploited and severe checks on every origin, within a request budget. Runs first.',
+	[Tier.DEEP]:
+		"Every remaining software-specific check. Runs last and does not count toward an origin's coverage.",
 	[Tier.SERVICES]: 'Certificate and protocol checks on open ports.',
 	[Tier.NAMES]: 'Record-level checks on resolved names.',
 	[Tier.REPLAY]: 'A finding re-run against each web asset the origin stands for.',

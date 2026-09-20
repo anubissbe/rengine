@@ -24,9 +24,10 @@ interface ScanFilters {
 	sortKey: ScanSortKey;
 	sortDir: ScanSortDir;
 	scheduled: boolean | null;
+	newChecks: boolean | null;
 }
 
-export type ScheduleMode = 'all' | 'scheduled' | 'manual';
+export type ScheduleMode = 'all' | 'scheduled' | 'manual' | 'new_checks';
 
 interface PaginationState {
 	currentPage: number;
@@ -44,7 +45,8 @@ function defaultFilters(): ScanFilters {
 		timeRange: 'all',
 		sortKey: 'started',
 		sortDir: 'desc',
-		scheduled: null
+		scheduled: null,
+		newChecks: null
 	};
 }
 
@@ -76,7 +78,8 @@ function createScansStore() {
 			filters.engines.length > 0 ||
 			filters.contexts.length > 0 ||
 			filters.timeRange !== 'all' ||
-			filters.scheduled !== null
+			filters.scheduled !== null ||
+			filters.newChecks !== null
 	);
 
 	const hasLive = $derived(
@@ -95,7 +98,8 @@ function createScansStore() {
 			time_range: filters.timeRange,
 			sort_by: filters.sortKey,
 			sort_dir: filters.sortDir,
-			scheduled: filters.scheduled ?? undefined
+			scheduled: filters.scheduled ?? undefined,
+			new_checks: filters.newChecks ?? undefined
 		};
 	}
 
@@ -291,11 +295,13 @@ function createScansStore() {
 		},
 
 		get scheduleMode(): ScheduleMode {
+			if (filters.newChecks) return 'new_checks';
 			return filters.scheduled === null ? 'all' : filters.scheduled ? 'scheduled' : 'manual';
 		},
 
 		setScheduleMode(mode: ScheduleMode) {
-			filters.scheduled = mode === 'all' ? null : mode === 'scheduled';
+			filters.newChecks = mode === 'new_checks' ? true : null;
+			filters.scheduled = mode === 'all' || mode === 'new_checks' ? null : mode === 'scheduled';
 			reload();
 		},
 		setSort(key: ScanSortKey, dir?: ScanSortDir) {
@@ -318,6 +324,7 @@ function createScansStore() {
 			filters.contexts = [];
 			filters.timeRange = 'all';
 			filters.scheduled = null;
+			filters.newChecks = null;
 			reload();
 		},
 
@@ -427,7 +434,8 @@ function createScansStore() {
 				time_range: filters.timeRange,
 				sort_by: filters.sortKey,
 				sort_dir: filters.sortDir,
-				scheduled: filters.scheduled ?? undefined
+				scheduled: filters.scheduled ?? undefined,
+				new_checks: filters.newChecks ?? undefined
 			});
 		},
 

@@ -238,7 +238,8 @@
 		expiring: 'Expiring',
 		attention: 'Needs attention',
 		awaiting: 'Enriching',
-		enriched: 'Enriched'
+		enriched: 'Enriched',
+		monitored: 'New checks'
 	};
 
 	let activeChips = $derived.by(() => {

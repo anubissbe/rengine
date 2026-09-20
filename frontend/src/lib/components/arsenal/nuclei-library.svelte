@@ -71,7 +71,19 @@
 	let origin = $state(ALL);
 	let set = $state(ALL);
 	let fired = $state(false);
+	let onlyNew = $state(false);
+	let seenAt = $state<string | null>(null);
 	let reqId = 0;
+
+	let newCount = $state(0);
+
+	function isNew(template: VulnTemplateRead): boolean {
+		return (
+			seenAt !== null &&
+			template.origin === 'official' &&
+			Date.parse(template.created_at) > Date.parse(seenAt)
+		);
+	}
 
 	let pageCount = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
 	let pageIndex = $derived(Math.floor(filter.offset / PAGE_SIZE));
@@ -90,11 +102,19 @@
 		return `background:color-mix(in oklch, ${fill} 14%, transparent);color:color-mix(in oklch, ${fill} 85%, var(--foreground));box-shadow:inset 0 0 0 1px color-mix(in oklch, ${fill} 30%, transparent)`;
 	}
 
+	let marked = false;
+
 	async function loadStats() {
 		statsLoading = true;
 		try {
 			stats = await vulnTemplatesApi.stats();
 			statsError = null;
+			if (!marked) {
+				marked = true;
+				seenAt = stats.seen_at;
+				newCount = stats.new;
+				void vulnTemplatesApi.seen().catch(() => undefined);
+			}
 		} catch (e) {
 			stats = null;
 			statsError = e instanceof Error ? e.message : 'Request failed.';
@@ -140,6 +160,7 @@
 		const org = origin === ALL ? [] : [origin];
 		const chosen = set === ALL ? [] : [set];
 		const onlyFired = fired;
+		const newSince = onlyNew ? seenAt : null;
 		untrack(() => {
 			filter = {
 				...filter,
@@ -148,6 +169,7 @@
 				origins: org,
 				sets: chosen,
 				fired: onlyFired,
+				new_since: newSince,
 				offset: 0
 			};
 		});
@@ -309,6 +331,19 @@
 						<span class="text-sm font-medium tabular-nums">{stats.fired.toLocaleString()}</span>
 						<span class="text-xs text-muted-foreground">with findings</span>
 					</button>
+					{#if newCount > 0}
+						<button
+							type="button"
+							class="flex flex-col text-left hover:opacity-80"
+							onclick={() => (onlyNew = !onlyNew)}
+							aria-pressed={onlyNew}
+						>
+							<span class="text-sm font-medium text-info tabular-nums"
+								>{newCount.toLocaleString()}</span
+							>
+							<span class="text-xs text-muted-foreground">new since last visit</span>
+						</button>
+					{/if}
 					<div class="flex flex-col">
 						<span class="text-sm font-medium tabular-nums">
 							{stats.official.toLocaleString()}
@@ -514,6 +549,15 @@
 											</span>
 											{#if custom}
 												<Badge variant="info" class="text-2xs font-normal">Custom</Badge>
+											{/if}
+											{#if isNew(template)}
+												<Hint text={`Added ${relativeTime(template.created_at)}`}>
+													{#snippet child(props)}
+														<span {...props} class="flex h-5 items-center">
+															<Badge variant="info" class="px-1.5 text-2xs font-normal">New</Badge>
+														</span>
+													{/snippet}
+												</Hint>
 											{/if}
 											{#if template.findings > 0}
 												<Hint text="Findings from this check across every scan">

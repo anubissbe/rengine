@@ -8,7 +8,8 @@ export const NOTIFICATION_TYPES = [
 	'target',
 	'resource',
 	'integration',
-	'watch'
+	'watch',
+	'new_checks'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -21,7 +22,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
 	target: 'Target',
 	resource: 'Resource',
 	integration: 'Integration',
-	watch: 'Watch'
+	watch: 'Watch',
+	new_checks: 'New checks'
 };
 
 export type NotificationSeverity = MessageLevel;

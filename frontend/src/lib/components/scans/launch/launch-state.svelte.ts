@@ -2,6 +2,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import { scanEnginesStore } from '$lib/stores/scan-engines.svelte';
 import { engineCatalogStore } from '$lib/stores/engine-catalog.svelte';
 import { SELECT_NONE } from '$lib/constants';
+import { VULN_STAGE } from '$lib/config/vulnerabilities';
 import {
 	MAX_SCAN_BATCH,
 	type ScanBatchCreate,
@@ -60,6 +61,7 @@ export class LaunchState {
 	patch = $state<StageOverrides>({});
 	intensity = $state<Intensity | null>(null);
 	contextId = $state<string>(SELECT_NONE);
+	newChecks = $state<boolean | null>(null);
 	private savedQuick: { stages: StageOverrides; intensity: Intensity | null } | null = null;
 
 	readonly catalog = $derived(engineCatalogStore.catalog);
@@ -121,6 +123,7 @@ export class LaunchState {
 				})
 			: []
 	);
+	readonly vulnerabilitiesOn = $derived(this.runningStages.some((s) => s.name === VULN_STAGE));
 	readonly summary = $derived<EngineSummary | null>(
 		this.catalog && this.resolution
 			? summarize(this.resolution.effective, this.applicableStages, this.runIntensity)
@@ -314,7 +317,8 @@ export class LaunchState {
 			target_ids: this.targets.filter((t) => t.id).map((t) => t.id as string),
 			target_values: this.targets.filter((t) => !t.id).map((t) => t.value),
 			overrides: engine ? {} : this.overrides,
-			intensity: engine ? null : this.intensity
+			intensity: engine ? null : this.intensity,
+			new_checks: this.vulnerabilitiesOn ? this.newChecks : null
 		};
 	}
 
@@ -327,5 +331,6 @@ export class LaunchState {
 		this.patch = {};
 		this.intensity = null;
 		this.contextId = SELECT_NONE;
+		this.newChecks = null;
 	}
 }

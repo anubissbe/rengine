@@ -1,6 +1,9 @@
 <script lang="ts">
+	import Info from '@lucide/svelte/icons/info';
 	import Cell from '$lib/components/cell.svelte';
+	import Hint from '$lib/components/hint.svelte';
 	import { Switch } from '$lib/components/ui/switch';
+	import { NEW_CHECKS_HELP, NEW_CHECKS_TITLE } from '$lib/config/new-checks';
 	import { ROUTES } from '$lib/config/routes';
 	import { formatShortDate, relativeTime } from '$lib/utilities/dates';
 	import type { TargetSummaryRead } from '$lib/types/target-summary';
@@ -10,6 +13,8 @@
 		enrichedAt: string | null;
 		seedScans: boolean;
 		onToggleSeeds: (on: boolean) => void;
+		newChecks: boolean;
+		onToggleNewChecks: (on: boolean) => void;
 		onRefresh: () => void;
 		class?: string;
 	}
@@ -19,6 +24,8 @@
 		enrichedAt,
 		seedScans,
 		onToggleSeeds,
+		newChecks,
+		onToggleNewChecks,
 		onRefresh,
 		class: className = ''
 	}: Props = $props();
@@ -73,6 +80,32 @@
 					<span class="text-sm"
 						>{seedScans ? 'Scans start from stored assets' : 'Stored, not used'}</span
 					>
+				</label>
+			</dd>
+		</div>
+		<div class="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2">
+			<dt class="pt-px text-xs text-muted-foreground">New checks</dt>
+			<dd>
+				<label class="flex items-center gap-2">
+					<Switch
+						checked={newChecks}
+						onCheckedChange={onToggleNewChecks}
+						aria-label={NEW_CHECKS_TITLE}
+					/>
+					<span class="text-sm"
+						>{newChecks
+							? summary.last_completed_at
+								? 'Monitored'
+								: 'Waits for a completed scan'
+							: 'Not monitored'}</span
+					>
+					<Hint text={NEW_CHECKS_HELP}>
+						{#snippet child(props)}
+							<span {...props} class="flex h-5 items-center text-muted-foreground">
+								<Info class="size-3.5" />
+							</span>
+						{/snippet}
+					</Hint>
 				</label>
 			</dd>
 		</div>

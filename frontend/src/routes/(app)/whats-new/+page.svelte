@@ -229,7 +229,14 @@
 		if (!feed) return '';
 		const what = total === 1 ? '1 new' : `${total.toLocaleString()} new`;
 		const tail = gone ? ` · ${gone.toLocaleString()} gone` : '';
-		return `${what} ${periodLabel}${tail}${firstRuns}`;
+		return `${what} ${periodLabel}${tail}${fromNewChecks}${firstRuns}`;
+	});
+	let fromNewChecks = $derived.by(() => {
+		const n = feed?.new_checks ?? 0;
+		if (!n) return '';
+		return n === 1
+			? ' · 1 finding from new checks'
+			: ` · ${n.toLocaleString()} findings from new checks`;
 	});
 	let firstRuns = $derived.by(() => {
 		const n = feed?.first_runs ?? 0;

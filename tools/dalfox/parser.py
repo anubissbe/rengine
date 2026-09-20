@@ -40,7 +40,6 @@ def _severity(value: Any) -> str:
 def _template_id(record: dict) -> str:
     """A stable id per (finding type, injection context, cwe) so instances group."""
     parts = [
-        str(record.get("type") or "R"),
         str(record.get("inject_type") or record.get("detection_method") or ""),
         str(record.get("cwe") or "CWE-79"),
     ]
@@ -79,8 +78,11 @@ def parse_finding(record: dict) -> Finding | None:
         or f"Cross-site scripting ({result_type})"
     )
     payload = _text(record.get("payload"), 2000)
+    locator = (url.split("?", 1)[0] if url else "dalfox") + (
+        f"#{param}" if param else ""
+    )
     finding = Finding(
-        fingerprint=fingerprint(Scanner.DALFOX.value, template_id, matcher, matched_at),
+        fingerprint=fingerprint(Scanner.DALFOX.value, template_id, matcher, locator),
         scanner=Scanner.DALFOX.value,
         template_id=template_id,
         template_name=name,

@@ -3,7 +3,6 @@ import Braces from '@lucide/svelte/icons/braces';
 import Chrome from '@lucide/svelte/icons/chrome';
 import CircleHelp from '@lucide/svelte/icons/circle-help';
 import Cloud from '@lucide/svelte/icons/cloud';
-import Cpu from '@lucide/svelte/icons/cpu';
 import FileText from '@lucide/svelte/icons/file-text';
 import FileWarning from '@lucide/svelte/icons/file-warning';
 import Flame from '@lucide/svelte/icons/flame';
@@ -178,8 +177,7 @@ export const TEMPLATE_SET_ICONS: Record<string, IconComponent> = {
 	network: Plug,
 	ssl: Lock,
 	dns: Network,
-	headless: Chrome,
-	technology: Cpu
+	headless: Chrome
 };
 
 export const TEMPLATE_SET_LABELS: Record<string, string> = {
@@ -195,8 +193,7 @@ export const TEMPLATE_SET_LABELS: Record<string, string> = {
 	network: 'Network services',
 	ssl: 'TLS and certificates',
 	dns: 'DNS hygiene',
-	headless: 'Browser checks',
-	technology: 'Technology detection'
+	headless: 'Browser checks'
 };
 
 export const SURFACE_LABELS: Record<string, string> = {

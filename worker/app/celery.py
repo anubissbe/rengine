@@ -88,6 +88,8 @@ celery_app.conf.task_routes = {
     "app.tasks.dns.*": {"queue": "default"},
     "app.tasks.schedule.*": {"queue": "default"},
     "app.tasks.vuln_templates.*": {"queue": "default"},
+    "app.tasks.daily.*": {"queue": "default"},
+    "app.tasks.new_checks.*": {"queue": "default"},
     "app.tasks.endpoints.*": {"queue": "default"},
     "app.tasks.reports.*": {"queue": "default"},
     "app.tasks.export.*": {"queue": "default"},
@@ -112,6 +114,8 @@ celery_app.autodiscover_tasks(
         "app.tasks.schedule",
         "app.tasks.ip_asn",
         "app.tasks.vuln_templates",
+        "app.tasks.daily",
+        "app.tasks.new_checks",
         "app.tasks.freshness",
         "app.tasks.endpoints",
         "app.tasks.reports",
@@ -177,9 +181,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.ip_asn.backfill",
         "schedule": HYGIENE_BACKFILL_SECONDS,
     },
-    "vuln-template-sync": {
-        "task": "app.tasks.vuln_templates.sync",
+    "daily-jobs": {
+        "task": "app.tasks.daily.run",
         "schedule": TEMPLATE_SYNC_SECONDS,
+        "options": {"expires": TEMPLATE_SYNC_SECONDS},
     },
     "report-cleanup": {
         "task": "app.tasks.reports.cleanup",

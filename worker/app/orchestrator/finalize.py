@@ -7,11 +7,13 @@ from sqlalchemy.orm import Session
 from shared.definitions.domain_posture import SPOOFABLE_KEYS
 from shared.definitions.notifications import (
     ScanDeltas,
+    new_checks_result,
     scan_count_summary,
     scan_digest,
     scan_failed,
 )
 from shared.definitions.ports import SENSITIVE_PORTS
+from shared.definitions.secrets import FINALIZE_SOURCES
 from shared.definitions.vulnerabilities import SUPPRESSED_STATES, CoverageStatus
 from shared.definitions.watch import WATCH_HOST_KEY
 from shared.enums.activity import ActivityEvent, ActivityLevel
@@ -26,7 +28,13 @@ from shared.logging import get_logger
 from shared.models.scan import Scan
 from shared.models.scan_activity import ScanActivity
 from shared.models.vulnerability import VulnerabilityCoverage
-from shared.services import proxy_sync, software_match
+from shared.services import (
+    new_checks,
+    proxy_sync,
+    scan_surface,
+    secret_mining,
+    software_match,
+)
 from shared.services.activity_log import ActivityLogService
 from shared.services.celery_dispatch import (
     dispatch_interest_evaluation,
@@ -146,7 +154,7 @@ SELECT EXISTS (
 _VULN_BASELINE_SQL = """
 SELECT EXISTS (
     SELECT 1 FROM vulnerabilities b
-    JOIN scans bs ON bs.id = b.scan_id AND bs.scope = 'full'
+    JOIN scans bs ON bs.id = b.scan_id
                  AND bs.id <> :sid AND bs.started_at < :started
     WHERE b.target_id = :tid
 )
@@ -184,7 +192,7 @@ WHERE p.scan_id = :sid
 _NEW_VULNS_SQL = """
 WITH seen AS (
     SELECT DISTINCT b.fingerprint FROM vulnerabilities b
-    JOIN scans bs ON bs.id = b.scan_id AND bs.scope = 'full'
+    JOIN scans bs ON bs.id = b.scan_id
                  AND bs.id <> :sid AND bs.started_at < :started
     WHERE b.target_id = :tid
 )
@@ -327,8 +335,27 @@ def _refold_posture(session: Session, scan: Scan) -> None:
     session.commit()
 
 
+def _mine_findings(session: Session, scan: Scan) -> None:
+    """Read the finding responses the scanners wrote after the stage ran."""
+    if not secret_mining.stage_mined(session, scan.id):
+        return
+    outcome = secret_mining.mine_scan(
+        session,
+        scan_id=scan.id,
+        target_id=scan.target_id,
+        project_id=scan.project_id,
+        sources=FINALIZE_SOURCES,
+        incremental=True,
+    )
+    if outcome.busy:
+        logger.warning(
+            "finding responses not mined, scan is locked", scan_id=str(scan.id)
+        )
+
+
 def _settled_counts(session: Session, scan: Scan) -> dict:
     _guard(session, lambda: _match_software(session, scan), None)
+    _guard(session, lambda: _mine_findings(session, scan), None)
     _guard(session, lambda: _refold_posture(session, scan), None)
     _guard(session, lambda: analyze_result_tables(session), None)
     return derived_counts(session, scan.id)
@@ -369,7 +396,7 @@ def _measure(session: Session, scan: Scan) -> ScanDeltas:
 
 def _settle(session: Session, scan: Scan) -> None:
     """Settle the per-scope work a terminal run leaves behind."""
-    if scan.scope == ScanScope.FOCUSED.value:
+    if scan.scope == ScanScope.FOCUSED.value and not new_checks.is_follow_up(scan):
         try:
             compute_rechecks(session, scan)
         except Exception:
@@ -380,6 +407,11 @@ def _settle(session: Session, scan: Scan) -> None:
     except Exception:
         session.rollback()
         logger.warning("proxy sync failed for scan %s", scan.id, exc_info=True)
+    try:
+        scan_surface.settle(session, scan.id)
+    except Exception:
+        session.rollback()
+        logger.warning("surface settle failed for scan %s", scan.id, exc_info=True)
     if (scan.execution_config or {}).get(WATCH_HOST_KEY):
         dispatch_watch_settle(str(scan.id))
 
@@ -475,6 +507,13 @@ def finalize_scan_run(session: Session, scan: Scan, *, redis_url: str) -> None:
         session.commit()
         events.scan_completed(status=status, counts=counts, duration_seconds=duration)
         _dispatch_intel(scan)
+        if new_checks.is_follow_up(scan):
+            _notify(
+                notifier,
+                session,
+                scan,
+                new_checks_result(new_checks.result_of(session, scan)),
+            )
         if scan.scope != ScanScope.FOCUSED.value:
             _dispatch_interest(scan)
             _notify(

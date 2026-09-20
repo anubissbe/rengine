@@ -147,6 +147,7 @@ class TargetStatsResponse(BaseModel):
     attention: int
     awaiting: int
     enriched: int
+    monitored: int
 
 
 @router.get("/stats", response_model=TargetStatsResponse)
@@ -294,7 +295,9 @@ async def list_targets(
     ] = None,
     signal: Annotated[
         SignalName | None,
-        Query(description="Filter by signal: expiring, attention, awaiting, enriched"),
+        Query(
+            description="Filter by signal: expiring, attention, awaiting, enriched, monitored"
+        ),
     ] = None,
     sort_by: Annotated[SortKey, Query(description="Sort field")] = "updated",
     sort_dir: Annotated[SortDir, Query(description="Sort direction")] = "desc",

@@ -17,7 +17,8 @@
 	const SCHEDULE_MODES: { key: ScheduleMode; label: string }[] = [
 		{ key: 'all', label: 'All scans' },
 		{ key: 'scheduled', label: 'Scheduled only' },
-		{ key: 'manual', label: 'Manual only' }
+		{ key: 'manual', label: 'Manual only' },
+		{ key: 'new_checks', label: 'New checks runs' }
 	];
 
 	interface Props {

@@ -7,6 +7,7 @@ from sqlalchemy import Column, Text
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel, UniqueConstraint
 
+from shared.definitions.new_checks import MAX_TEMPLATE_IDS
 from shared.definitions.vulnerabilities import (
     MAX_SELECTED_TEMPLATES,
     MAX_TEMPLATE_BYTES,
@@ -139,6 +140,7 @@ class TemplateFilter(BaseModel):
     sets: list[str] = PydanticField(default_factory=list, max_length=40)
     tags: list[str] = PydanticField(default_factory=list, max_length=40)
     fired: bool = False
+    new_since: datetime | None = None
     limit: int = PydanticField(default=50, ge=1, le=200)
     offset: int = PydanticField(default=0, ge=0, le=1_000_000)
 
@@ -146,6 +148,11 @@ class TemplateFilter(BaseModel):
 class TemplatePage(BaseModel):
     items: list[VulnTemplateRead] = PydanticField(default_factory=list)
     total: int = 0
+
+
+class TemplateSeen(BaseModel):
+    seen_at: datetime | None = None
+    marked_at: datetime
 
 
 class TemplateSetSpec(BaseModel):
@@ -167,6 +174,9 @@ class TemplateSelection(BaseModel):
     include_tags: list[str] = PydanticField(default_factory=list, max_length=40)
     exclude_tags: list[str] = PydanticField(default_factory=list, max_length=40)
     exclude_templates: list[str] = PydanticField(default_factory=list, max_length=200)
+    template_ids: list[str] = PydanticField(
+        default_factory=list, max_length=MAX_TEMPLATE_IDS
+    )
     headless: bool = False
 
     @field_validator("severities")
@@ -210,6 +220,8 @@ class TemplateLibraryStats(BaseModel):
     sets: list[TemplateSetSpec] = PydanticField(default_factory=list)
     tags: list[SelectionBreakdown] = PydanticField(default_factory=list)
     fired: int = 0
+    new: int = 0
+    seen_at: datetime | None = None
     last_synced_at: datetime | None = None
     syncing: bool = False
 

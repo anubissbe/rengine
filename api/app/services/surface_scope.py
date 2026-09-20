@@ -6,20 +6,22 @@ from datetime import timedelta
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import distinct, exists, func, not_, select
+from sqlalchemy import cast, distinct, exists, func, not_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.services.asset_query import QueryScope, vuln_suppressed
 from shared.definitions.asset_query import COUNT_CAP
 from shared.definitions.dashboard import STALE_DAYS
+from shared.definitions.new_checks import NEW_CHECKS_KEY
 from shared.definitions.surface import (
     SURFACE_LABELS,
     SURFACE_NOUN,
     SURFACE_ORDER,
     SurfaceDimension,
 )
-from shared.enums.scan import SCAN_LIVE_STATUSES
+from shared.enums.scan import SCAN_LIVE_STATUSES, ScanScope, ScanStatus
 from shared.models.endpoint import Endpoint
 from shared.models.ip_address import IpAddress
 from shared.models.port import Port
@@ -95,7 +97,30 @@ class SurfaceScopeService:
 
     async def scope(self, project_id: UUID, dimension: str) -> QueryScope:
         picks = await self._picks(project_id, dimension)
-        return QueryScope(tuple(row.id for row in picks), project_id=project_id)
+        ids = [row.id for row in picks]
+        if dimension == SurfaceDimension.VULNERABILITIES.value:
+            ids.extend(await self._follow_ups(project_id, picks))
+        return QueryScope(tuple(ids), project_id=project_id)
+
+    async def _follow_ups(self, project_id: UUID, picks) -> list[UUID]:
+        """New-checks runs completed after each target's census pick."""
+        if not picks:
+            return []
+        at_by_target = {row.target_id: row.at for row in picks}
+        rows = await self.session.execute(
+            select(Scan.id, Scan.target_id, _started().label("at")).where(
+                Scan.project_id == project_id,
+                Scan.scope == ScanScope.FOCUSED.value,
+                Scan.status == ScanStatus.COMPLETED.value,
+                cast(Scan.execution_config, JSONB).has_key(NEW_CHECKS_KEY),
+                Scan.target_id.in_(list(at_by_target)),
+            )
+        )
+        return [
+            row.id
+            for row in rows.all()
+            if row.at is not None and row.at > at_by_target[row.target_id]
+        ]
 
     async def scans_by_target(
         self, project_id: UUID, dimension: str
@@ -163,7 +188,7 @@ class SurfaceScopeService:
     ) -> SurfaceCoverage:
         picks = await self._picks(project_id, dimension)
         targets = await self._targets(project_id)
-        scope = QueryScope(tuple(row.id for row in picks), project_id=project_id)
+        scope = await self.scope(project_id, dimension)
         noun, noun_plural = SURFACE_NOUN[dimension]
         out = SurfaceCoverage(
             dimension=dimension,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import uuid
 from collections import Counter
 from collections.abc import Iterable
@@ -19,6 +20,7 @@ from shared.definitions.scan_surface import (
 )
 from shared.definitions.vulnerabilities import CoverageStatus, TemplateOrigin
 from shared.definitions.vulnerabilities import Surface as SurfaceMode
+from shared.enums.target import TargetType
 from shared.logging import get_logger
 from shared.models.endpoint import Endpoint
 from shared.models.http_asset import HttpAsset
@@ -44,6 +46,9 @@ logger = get_logger(__name__)
 
 _INSERT_CHUNK = 1000
 _ROOT_PATH = "/"
+_ADDRESS_TARGETS = frozenset(
+    {TargetType.IP.value, TargetType.IP_RANGE.value, TargetType.ASN.value}
+)
 _RAN = frozenset(
     {
         CoverageStatus.COMPLETED.value,
@@ -139,6 +144,14 @@ class SurfacePlan:
 # ---------- reads ----------
 
 
+def _is_ip_literal(host: str | None) -> bool:
+    try:
+        ipaddress.ip_address((host or "").strip("[]"))
+    except ValueError:
+        return False
+    return True
+
+
 def library_tags(session: Session) -> frozenset[str]:
     """Every tag the check library carries."""
     tag = func.jsonb_array_elements_text(cast(VulnTemplate.tags, JSONB)).table_valued(
@@ -164,7 +177,9 @@ def covered_before(
             ScanSurfaceItem.target_id == target_id,
             ScanSurfaceItem.scan_id != scan_id,
             ScanSurfaceItem.class_ == SurfaceClass.ROOT.value,
-            cast(ScanSurfaceItem.tiers_done, JSONB).has_key(Tier.UNIVERSAL.value),
+            cast(ScanSurfaceItem.tiers_done, JSONB)[Tier.UNIVERSAL.value].astext.like(
+                f"{CoverageStatus.COMPLETED.value}@%"
+            ),
         )
         .distinct()
     )
@@ -193,6 +208,7 @@ def _root_candidates(
     vocabulary: frozenset[str],
     covered: set[str],
     unmapped: Counter,
+    keep_edges: bool = False,
 ) -> tuple[list[RootCandidate], list[SurfaceItem]]:
     counts = _endpoint_counts(session, scan_id)
     root_excluded = matches_any(_ROOT_PATH, excluded_paths) if excluded_paths else False
@@ -228,6 +244,10 @@ def _root_candidates(
             continue
         if row.status_code is None:
             item.drop_reason = DropReason.NO_ANSWER.value
+            dropped.append(item)
+            continue
+        if row.is_cdn and _is_ip_literal(root.host) and not keep_edges:
+            item.drop_reason = DropReason.CDN_EDGE.value
             dropped.append(item)
             continue
         if root.value in seen:
@@ -417,6 +437,8 @@ def build(
         vocabulary=vocabulary,
         covered=covered,
         unmapped=plan.unmapped_tech,
+        # address targets keep their edge roots
+        keep_edges=str(getattr(resolved, "target_type", "")) in _ADDRESS_TARGETS,
     )
     plan.dropped.extend(dropped)
 
@@ -440,7 +462,7 @@ def build(
         representatives.append(rep)
     representatives.sort(key=lambda item: (-item.rank, item.value))
 
-    kept = representatives[: max(0, max_targets)]
+    kept = representatives if max_targets <= 0 else representatives[:max_targets]
     for item in representatives[len(kept) :]:
         for row in (item, *item.members):
             row.drop_reason = DropReason.OVER_CAP.value
@@ -576,6 +598,9 @@ def split_members(session: Session, item_ids: Iterable[uuid.UUID], note: str) ->
         .where(ScanSurfaceItem.id.in_(ids))
         .values(
             drop_reason=None,
+            representative_id=None,
+            cluster_id=None,
+            members=1,
             state=SurfaceState.PARTIAL.value,
             note=note[:500],
         )

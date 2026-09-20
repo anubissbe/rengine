@@ -97,9 +97,13 @@ def revoke_scan_tasks(task_ids: list[str]) -> None:
 
 
 def dispatch_template_sync() -> bool:
-    """Kick off a library refresh."""
+    """Kick off a library refresh and the follow-up runs it feeds."""
     try:
-        get_celery_client().send_task("app.tasks.vuln_templates.sync", queue="default")
+        get_celery_client().send_task(
+            "app.tasks.daily.run",
+            kwargs={"jobs": ["library", "new_checks"]},
+            queue="default",
+        )
     except Exception:
         logger.warning("template sync dispatch failed", exc_info=True)
         return False

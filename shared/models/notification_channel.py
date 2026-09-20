@@ -21,6 +21,7 @@ DEFAULT_PREFERENCE_TYPES = [
     NotificationType.SECURITY.value,
     NotificationType.SYSTEM.value,
     NotificationType.WATCH.value,
+    NotificationType.NEW_CHECKS.value,
 ]
 
 

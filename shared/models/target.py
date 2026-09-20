@@ -86,6 +86,8 @@ class Target(TargetBase, table=True):
     )
 
     seed_scans: bool = Field(default=True)
+    new_checks: bool = Field(default=False)
+    new_checks_swept_at: datetime | None = Field(default=None)
 
     dns_status: TaskStatus = Field(default=TaskStatus.PENDING, index=True)
     dns_error: str | None = Field(default=None, max_length=1000)
@@ -174,6 +176,7 @@ class TargetUpdate(SQLModel):
     organization_names: list[str] | None = None
     tag_names: list[str] | None = None
     seed_scans: bool | None = None
+    new_checks: bool | None = None
 
     @field_validator("tag_names", "tags", check_fields=False)
     @classmethod
@@ -206,6 +209,7 @@ class TargetRead(TargetBase):
     organizations: list[OrganizationSummary] = Field(default_factory=list)
     tags: list[TagSummary] = Field(default_factory=list)
     seed_scans: bool = True
+    new_checks: bool = False
     seed_count: int | None = None
 
 

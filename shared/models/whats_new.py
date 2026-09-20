@@ -74,6 +74,7 @@ class NewGroup(BaseModel):
     scan_status: str | None = None
     previous_scan_id: uuid.UUID | None = None
     retired: int = 0
+    run_label: str | None = None
 
 
 class NewDay(BaseModel):
@@ -94,6 +95,7 @@ class NewFeed(BaseModel):
     truncated: bool = False
     first_runs: int = 0
     visual: int = 0
+    new_checks: int = 0
 
 
 class VisualPair(BaseModel):

@@ -15,6 +15,7 @@ from sqlalchemy import (
     cast,
     column,
     exists,
+    false,
     func,
     not_,
     nullslast,
@@ -33,6 +34,7 @@ from app.services.scan_engine import ScanEngineService, stage_effects
 from app.services.target import TargetService
 from shared.config import BaseAppSettings
 from shared.definitions.compare import Tone
+from shared.definitions.new_checks import NEW_CHECKS_KEY
 from shared.definitions.rescan import change_dimension, rescan_label
 from shared.definitions.watch import WATCH_HOST_KEY
 from shared.enums.activity import ActivityEvent, ActivityLevel
@@ -509,6 +511,8 @@ class ScanService:
         engine, context, target, resolved = await self._resolve_and_validate(
             data, project_id, created_by
         )
+        if data.new_checks is not None:
+            target.new_checks = data.new_checks
         logger.info(
             "Creating scan for target=%s engine=%s header_names=%s",
             target.id,
@@ -551,6 +555,9 @@ class ScanService:
             data.engine_id, data.context_id, project_id
         )
         targets = await self._batch_targets(data, project_id, created_by)
+        if data.new_checks is not None:
+            for target in targets:
+                target.new_checks = data.new_checks
 
         stored = await target_seeds.load_async(
             self.session, [target.id for target in targets]
@@ -631,10 +638,16 @@ class ScanService:
         contexts: list[str] | None,
         time_range: str | None,
         include_focused: bool = False,
+        new_checks: bool | None = None,
     ) -> list:
         conds: list = []
-        if not include_focused:
+        follow_up = cast(m.execution_config, JSONB).has_key(NEW_CHECKS_KEY)
+        if new_checks is True:
+            conds.append(follow_up)
+        elif not include_focused:
             conds.append(census_only(m))
+        if new_checks is False:
+            conds.append(not_(func.coalesce(follow_up, false())))
         if statuses:
             conds.append(m.status.in_(statuses))
         if engines:
@@ -661,6 +674,7 @@ class ScanService:
         scheduled: bool | None = None,
         include_focused: bool = False,
         parent_id: UUID | None = None,
+        new_checks: bool | None = None,
     ) -> Select:
         query = select(Scan).where(
             Scan.project_id == project_id,
@@ -671,6 +685,7 @@ class ScanService:
                 contexts,
                 time_range,
                 include_focused or parent_id is not None,
+                new_checks,
             ),
         )
         if parent_id is not None:
@@ -775,6 +790,7 @@ class ScanService:
         sort_dir: ScanSortDir = "desc",
         scheduled: bool | None = None,
         include_focused: bool = False,
+        new_checks: bool | None = None,
     ) -> list[ScanExportRow]:
         query = self.build_list_query(
             project_id=project_id,
@@ -788,6 +804,7 @@ class ScanService:
             sort_dir=sort_dir,
             scheduled=scheduled,
             include_focused=include_focused,
+            new_checks=new_checks,
         ).limit(MAX_SCAN_EXPORT)
         result = await self.session.execute(query)
         return [

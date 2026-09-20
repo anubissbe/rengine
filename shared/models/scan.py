@@ -177,6 +177,7 @@ class ScanCreate(BaseModel):
     target_value: str | None = Field(default=None, max_length=500)
     overrides: dict[str, dict] = Field(default_factory=dict)
     intensity: str | None = None
+    new_checks: bool | None = None
     seed_assets: list[SeedAsset] = Field(
         default_factory=list, max_length=MAX_RUN_ASSETS
     )
@@ -262,6 +263,7 @@ class ScanBatchCreate(BaseModel):
     target_values: list[str] = Field(default_factory=list, max_length=MAX_SCAN_BATCH)
     overrides: dict[str, dict] = Field(default_factory=dict)
     intensity: str | None = None
+    new_checks: bool | None = None
 
     @model_validator(mode="after")
     def _require_targets(self):

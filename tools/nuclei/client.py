@@ -17,6 +17,8 @@ from shared.logging import get_logger
 from shared.services.scan_resolve import redact_command
 from tools.nuclei.parser import Finding, parse_finding
 from tools.runner import CLIToolRunner, ToolNotFoundError
+from tools.runner.abort import StageAbortedError
+from tools.runner.executor import failure_excerpt
 from tools.runner.models import CommandRecorder
 
 logger = get_logger(__name__)
@@ -26,10 +28,49 @@ DEFAULT_TIMEOUT = 7200
 
 # nuclei spells it -H/-header
 HEADER_FLAG = "-header"
+# short spellings of the flags the stage sets
+NUCLEI_ALIASES: dict[str, str] = {
+    "-H": "-header",
+    "-bs": "-bulk-size",
+    "-c": "-concurrency",
+    "-dc": "-disable-clustering",
+    "-duc": "-disable-update-check",
+    "-dr": "-disable-redirects",
+    "-eh": "-exclude-hosts",
+    "-fr": "-follow-redirects",
+    "-iserver": "-interactsh-server",
+    "-itoken": "-interactsh-token",
+    "-j": "-jsonl",
+    "-l": "-list",
+    "-mhe": "-max-host-error",
+    "-mp": "-metrics-port",
+    "-mt": "-max-time",
+    "-p": "-proxy",
+    "-prc": "-probe-concurrency",
+    "-sc": "-system-chrome",
+    "-nc": "-no-color",
+    "-nh": "-no-httpx",
+    "-ni": "-no-interactsh",
+    "-nmhe": "-no-mhe",
+    "-o": "-output",
+    "-or": "-omit-raw",
+    "-ot": "-omit-template",
+    "-pt": "-type",
+    "-rl": "-rate-limit",
+    "-rld": "-rate-limit-duration",
+    "-rlm": "-rate-limit-minute",
+    "-si": "-stats-interval",
+    "-sj": "-stats-json",
+    "-sresp": "-store-resp",
+    "-srd": "-store-resp-dir",
+    "-ss": "-scan-strategy",
+    "-t": "-templates",
+}
 _EVICTION_SLACK = 120
 
 _DROPPED = re.compile(
-    r"Skipped\s+(?P<host>\S+)\s+from target list as found unresponsive.*?:\s*(?P<reason>.*)$"
+    r"Skipped\s+(?P<host>\S+)\s+from target list as found unresponsive\s+"
+    r"(?:permanently:\s*(?P<reason>.*)|(?P<count>\d+)\s+times)\s*$"
 )
 _HONEYPOT = re.compile(
     r"honeypot\s+detected[^:]*:\s*(?P<host>\S+).*?matched\s+(?P<count>\d+)",
@@ -67,10 +108,32 @@ def _drop_record(line: str) -> dict | None:
     dropped = _DROPPED.search(line)
     if dropped is None:
         return None
-    return {
-        "host": dropped.group("host"),
-        "reason": dropped.group("reason").strip()[:200],
-    }
+    reason = dropped.group("reason")
+    if reason is None:
+        reason = f"unresponsive {dropped.group('count')} times in a row"
+    return {"host": dropped.group("host"), "reason": reason.strip()[:200]}
+
+
+def _settle_run(run: NucleiRun, outcome, timeout: int, max_minutes: int) -> None:
+    """What the process itself said: killed, timed out, cut by -max-time, or failed."""
+    if outcome.stopped:
+        raise StageAbortedError
+    run.exit_code = outcome.return_code
+    run.timed_out = outcome.timed_out
+    allowance = max_minutes * 60
+    # nuclei exits 1 when -max-time cuts it
+    run.budget_hit = bool(
+        allowance and outcome.return_code == 1 and run.duration_seconds >= allowance - 5
+    )
+    if run.error is not None or run.budget_hit:
+        return
+    if outcome.timed_out:
+        run.error = f"nuclei timed out after {timeout} seconds"
+    elif outcome.return_code not in (0, None):
+        excerpt = failure_excerpt(outcome.stderr, None)
+        run.error = f"nuclei exited {outcome.return_code}" + (
+            f": {excerpt}" if excerpt else ""
+        )
 
 
 def _oast_args(opt: NucleiOptions) -> list[str]:
@@ -212,10 +275,11 @@ class NucleiRun:
     stats: NucleiStats = field(default_factory=NucleiStats)
     dropped: list[dict] = field(default_factory=list)
     exit_code: int = 0
+    timed_out: bool = False
+    budget_hit: bool = False
     error: str | None = None
     command: str = ""
     duration_seconds: float = 0.0
-    started: bool = False
 
 
 def _int(value) -> int | None:
@@ -240,6 +304,7 @@ class NucleiClient:
                 default_timeout=DEFAULT_TIMEOUT,
                 recorder=recorder,
                 extra_args=list(self.options.extra_args),
+                aliases=NUCLEI_ALIASES,
             )
         except ToolNotFoundError as exc:
             raise NucleiError(str(exc)) from exc
@@ -345,9 +410,10 @@ class NucleiClient:
             dropped.append(record)
 
         started = time.monotonic()
-        run.started = True
+        outcome = None
         try:
             with self._stream(targets, _stderr, timeout, should_stop) as stream:
+                outcome = stream
                 for record in _paced(stream.records, _guarded(on_idle)):
                     if record is _IDLE:
                         continue
@@ -373,6 +439,10 @@ class NucleiClient:
         run.stats = stats
         run.dropped = dropped
         run.command = self._command(targets)
+        if outcome is not None:
+            _settle_run(
+                run, outcome, timeout or DEFAULT_TIMEOUT, self.options.max_minutes
+            )
         return run
 
     def _stream(self, targets: list[str], sink, timeout: int | None, should_stop=None):

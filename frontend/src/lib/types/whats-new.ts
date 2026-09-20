@@ -64,6 +64,7 @@ export interface NewGroup {
 	scan_status: string | null;
 	previous_scan_id: string | null;
 	retired: number;
+	run_label: string | null;
 }
 
 export interface NewDay {
@@ -84,6 +85,7 @@ export interface NewFeed {
 	truncated: boolean;
 	first_runs: number;
 	visual: number;
+	new_checks: number;
 }
 
 export interface VisualPair {

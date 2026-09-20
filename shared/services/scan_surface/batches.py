@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 
 from shared.definitions.scan_surface import (
+    BATCH_EFFICIENCY,
     BATCH_MAX_HOSTS,
     BATCH_MIN_HOSTS,
     BATCH_SECONDS,
@@ -13,9 +14,11 @@ from shared.definitions.scan_surface import (
 
 def batch_size(cost_per_host: int, rate: int, seconds: int = BATCH_SECONDS) -> int:
     """Hosts one invocation can sweep in about `seconds` at `rate`."""
-    budget = max(1, rate) * max(1, seconds)
+    budget = int(max(1, rate) * max(1, seconds) * BATCH_EFFICIENCY)
     size = budget // max(1, cost_per_host)
-    return max(BATCH_MIN_HOSTS, min(BATCH_MAX_HOSTS, size))
+    if size < BATCH_MIN_HOSTS:
+        return max(1, size)
+    return min(BATCH_MAX_HOSTS, size)
 
 
 def chunk[T](items: Sequence[T], size: int) -> list[list[T]]:

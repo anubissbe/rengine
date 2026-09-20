@@ -52,12 +52,15 @@ ACTIONABLE_SEVERITIES: tuple[str, ...] = (
 
 ALERT_SEVERITIES: tuple[str, ...] = (Severity.CRITICAL.value, Severity.HIGH.value)
 
-DEFAULT_SEVERITIES: list[str] = [
+# severities the vulnerability scan runs
+SCANNABLE_SEVERITIES: tuple[str, ...] = (
     Severity.CRITICAL.value,
     Severity.HIGH.value,
     Severity.MEDIUM.value,
     Severity.LOW.value,
-]
+)
+
+DEFAULT_SEVERITIES: list[str] = list(SCANNABLE_SEVERITIES)
 
 
 def severity_rank(value: str | None) -> int:
@@ -282,6 +285,7 @@ TEMPLATE_SETS: tuple[TemplateSet, ...] = (
             "injection",
             "traversal",
         ),
+        default=True,
     ),
     TemplateSet(
         key="cloud",
@@ -315,18 +319,16 @@ TEMPLATE_SETS: tuple[TemplateSet, ...] = (
         dirs=("headless",),
         headless=True,
     ),
-    TemplateSet(
-        key="technology",
-        label="Technology detection",
-        description="Identifies software. High volume, all informational.",
-        tags=("tech", "detect", "fingerprint"),
-    ),
 )
 
 TEMPLATE_SET_KEYS: tuple[str, ...] = tuple(s.key for s in TEMPLATE_SETS)
 TEMPLATE_SET_BY_KEY: dict[str, TemplateSet] = {s.key: s for s in TEMPLATE_SETS}
 DEFAULT_TEMPLATE_SETS: list[str] = [s.key for s in TEMPLATE_SETS if s.default]
 HEADLESS_SETS: frozenset[str] = frozenset(s.key for s in TEMPLATE_SETS if s.headless)
+
+
+# retired check sets
+RETIRED_TEMPLATE_SETS: frozenset[str] = frozenset({"technology"})
 
 
 def reject_unknown(values: list[str], known, axis: str) -> list[str]:
@@ -336,6 +338,18 @@ def reject_unknown(values: list[str], known, axis: str) -> list[str]:
         msg = f"Unknown {axis}: {', '.join(sorted(unknown))}. Choose from: {', '.join(known)}."
         raise ValueError(msg)
     return values
+
+
+def scannable_severities(values: list[str]) -> list[str]:
+    """Known severities, minus the ones the vulnerability scan never runs."""
+    reject_unknown(values, SEVERITY_ORDER, "severity")
+    return [v for v in values if v in SCANNABLE_SEVERITIES]
+
+
+def live_template_sets(values: list[str]) -> list[str]:
+    """Known check sets, minus the retired ones."""
+    reject_unknown(values, (*TEMPLATE_SET_KEYS, *RETIRED_TEMPLATE_SETS), "check set")
+    return [v for v in values if v in TEMPLATE_SET_KEYS]
 
 
 FORBIDDEN_TEMPLATE_KEYS: frozenset[str] = frozenset({"code"})
@@ -368,6 +382,7 @@ WEAK_MATCHER_PATHS: frozenset[str] = frozenset(
 )
 
 KEV_TAG = "kev"
+VKEV_TAG = "vkev"
 
 EPSS_HIGH = 0.5
 CVSS_HIGH = 7.0
@@ -375,3 +390,7 @@ CVSS_HIGH = 7.0
 
 def is_kev(tags: list[str] | tuple[str, ...] | None) -> bool:
     return KEV_TAG in {t.lower() for t in tags or ()}
+
+
+def is_vkev(tags: list[str] | tuple[str, ...] | None) -> bool:
+    return VKEV_TAG in {t.lower() for t in tags or ()}

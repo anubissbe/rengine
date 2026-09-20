@@ -19,6 +19,7 @@ from shared.services.scan_surface import (
     batches,
     cluster_rank,
     cluster_roots,
+    cost,
     host_tags,
     parse_root,
     root_value,
@@ -27,6 +28,7 @@ from shared.services.scan_surface import (
     split,
     tech_groups,
 )
+from shared.services.scan_surface.tiers import blind_core
 from shared.services.vuln_templates import parse_template
 
 pytestmark = pytest.mark.pipeline
@@ -248,6 +250,15 @@ def test_normalisation_and_aliases():
     assert tags_for_tech("Zog CMS") is None
 
 
+def test_an_alias_key_with_punctuation_is_reachable():
+    # the httpx spelling and the alias key differ in dots and hyphens
+    assert tags_for_tech("Microsoft ASP.NET") == ("aspnet", "asp", "dotnet")
+    assert tags_for_tech("ASP.NET") == ("aspnet", "asp", "dotnet")
+    assert tags_for_tech("F5 BigIP") == ("bigip", "f5")
+    assert tags_for_tech("PAN-OS") == ("paloalto", "panos")
+    assert tags_for_tech("Microsoft-IIS") == ("iis",)
+
+
 # ---------- template tiers ----------
 
 
@@ -268,6 +279,36 @@ def _row(
         simple=bool(simple) if simple is not None else False,
         requests=requests,
     )
+
+
+def test_a_costly_universal_check_is_not_swept_across_every_origin():
+    """zip-backup-files was 1,305 requests a host, 84% of the universal tier."""
+    cheap = _row("git-config", ["exposure", "config"], simple=False, requests=2)
+    heavy = _row(
+        "zip-backup-files", ["exposure", "backup"], simple=False, requests=1305
+    )
+    plan = split([cheap, heavy])
+    assert cheap in plan.universal
+    assert heavy not in plan.universal
+    assert heavy in plan.product
+
+
+def test_the_blind_sweep_stays_inside_its_budget_known_exploited_first():
+    rows = [
+        _row("kev-cheap", ["cve", "kev"], requests=2),
+        _row("kev-dear", ["cve", "kev"], requests=40),
+        _row("plain-critical", ["cve"], requests=2),
+        _row("plain-low", ["cve"], requests=2),
+    ]
+    for row, severity in zip(
+        rows, ("critical", "critical", "critical", "low"), strict=True
+    ):
+        row.severity = severity
+
+    core = blind_core(rows, budget=10)
+
+    assert [r.template_id for r in core] == ["kev-cheap", "plain-critical", "plain-low"]
+    assert cost(core) <= 10, "the sweep may not exceed its per-origin budget"
 
 
 def test_generic_and_product_tags():
@@ -348,10 +389,11 @@ def test_tech_groups_share_one_invocation_and_fold_the_tail():
 
 
 def test_batches_are_sized_to_the_rate_and_clamped():
-    assert batch_size(cost_per_host=12_000, rate=112, seconds=600) == 5
+    assert batch_size(cost_per_host=12_000, rate=112, seconds=600) == 3
     assert batch_size(cost_per_host=10, rate=112, seconds=600) == 250
-    assert batch_size(cost_per_host=10_000_000, rate=1, seconds=600) == 3
-    assert [len(b) for b in batches(range(11), 12_000, 112)] == [5, 5, 1]
+    assert batch_size(cost_per_host=10_000_000, rate=1, seconds=600) == 1
+    assert batch_size(cost_per_host=800, rate=1, seconds=600) == 1
+    assert [len(b) for b in batches(range(11), 12_000, 112)] == [3, 3, 3, 2]
 
 
 # ---------- request shape at parse time ----------
@@ -402,6 +444,36 @@ http:
       - type: word
         words: ["x"]
 """
+
+
+_HEADLESS_FLOW = """
+id: dom-xss
+info:
+  name: DOM XSS
+  severity: medium
+  tags: dast,xss
+flow: http() && headless()
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers:
+      - type: word
+        words: ["x"]
+headless:
+  - steps:
+      - action: navigate
+        args:
+          url: "{{BaseURL}}"
+    matchers:
+      - type: word
+        words: ["x"]
+"""
+
+
+def test_a_template_with_a_headless_block_needs_the_browser():
+    assert parse_template(_HEADLESS_FLOW).protocol == "headless"
+    assert parse_template(_SIMPLE).protocol == "http"
 
 
 def test_parse_template_records_paths_and_simplicity():

@@ -100,7 +100,7 @@
 	let requests = $derived(sum(coverage.map((c) => c.requests_sent)));
 	let errors = $derived(sum(coverage.map((c) => c.errors)));
 	let dropped = $derived(coverage.reduce((a, c) => a + c.hosts_dropped_count, 0));
-	let partial = $derived(coverage.some((c) => c.status === 'partial' || c.status === 'failed'));
+	let partial = $derived(ran && coverage.some((c) => c.status !== 'completed'));
 	let Icon = $derived(!ran ? CircleSlash : partial ? TriangleAlert : CircleCheck);
 	let tone = $derived(
 		!ran ? 'text-muted-foreground' : partial ? 'text-warning' : 'text-muted-foreground'

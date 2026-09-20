@@ -47,6 +47,7 @@ class PortSource(StrEnum):
     INTERNETDB = "internetdb"
     HTTP_PROBE = "http_probe"
     BANNER = "banner"
+    SEED = "seed"
 
 
 PORT_SOURCE_LABELS: dict[str, str] = {
@@ -54,9 +55,11 @@ PORT_SOURCE_LABELS: dict[str, str] = {
     PortSource.INTERNETDB.value: "External scanner",
     PortSource.HTTP_PROBE.value: "HTTP probe",
     PortSource.BANNER.value: "Service banner",
+    PortSource.SEED.value: "Seeded",
 }
 
 PORT_SOURCE_RANK: dict[str, int] = {
+    PortSource.SEED.value: 0,
     PortSource.INTERNETDB.value: 0,
     PortSource.BANNER.value: 1,
     PortSource.HTTP_PROBE.value: 2,

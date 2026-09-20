@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from shared.definitions.intensity import Transport
-from shared.definitions.scan_surface import Tier
+from shared.definitions.scan_surface import ROOT_TIERS, Tier
 from shared.definitions.vulnerabilities import Scanner
 from shared.services.scan_surface import SurfaceItem, SurfacePlan, split
 from stages.vulnerability_scan.config import VulnerabilityScanConfig
@@ -275,18 +275,89 @@ def test_the_schedule_spends_the_budget_in_tier_order(monkeypatch):
     jobs = lanes[STANDARD]
     assert [j.tier for j in jobs] == [
         Tier.ONE_REQUEST.value,
-        Tier.UNIVERSAL.value,
-        Tier.SERVICES.value,
-        Tier.MATCHED.value,
         Tier.BLIND.value,
+        Tier.MATCHED.value,
+        Tier.SERVICES.value,
+        Tier.UNIVERSAL.value,
     ]
-    assert len(jobs[0].items) == 3, "one-request runs on the members too"
-    assert len(jobs[1].items) == 1, "universal runs on the representative"
-    assert jobs[1].covered == 2
-    assert jobs[2].types == ("tcp", "ssl", "javascript")
-    assert jobs[3].templates == ["/t/geo.yaml"]
-    assert set(jobs[4].templates) == {"/t/geo.yaml", "/t/blind.yaml"}
+    assert len(jobs[0].items) == 3, "one-request runs on the members too, first"
+    assert set(jobs[1].templates) == {"/t/geo.yaml", "/t/blind.yaml"}
+    assert jobs[2].templates == ["/t/geo.yaml"]
+    assert jobs[3].types == ("tcp", "ssl", "javascript")
+    assert len(jobs[4].items) == 1, "universal runs on the representative"
+    assert jobs[4].covered == 2
     assert all(j.rate == 150 for j in jobs)
+
+
+def test_the_deep_sweep_is_its_own_tier_and_never_planned(monkeypatch):
+    writes = _Writes()
+    monkeypatch.setattr(nuclei_scanner, "WAF_RATE_DIVISOR", 1)
+    monkeypatch.setattr(nuclei_scanner, "blind_core", lambda rows: rows[:1])
+    scanner = _scanner(writes)
+    plan = SurfacePlan(roots=[_item("https://rep.example")])
+    rows = [
+        SimpleNamespace(
+            id=f"r{i}",
+            template_id=f"cve{i}",
+            tags=["cve", f"product{i}"],
+            protocol="http",
+            paths=[],
+            simple=False,
+            requests=1,
+            origin="official",
+        )
+        for i in range(2)
+    ]
+    library = _Templates(
+        rows=rows, paths={r.id: f"/t/{r.template_id}.yaml" for r in rows}
+    )
+    tiers = split(rows)
+    jobs = scanner._schedule(plan, tiers, library)[STANDARD]
+    assert [j.tier for j in jobs] == [Tier.BLIND.value]
+    deep = scanner._schedule_deep(plan, tiers, library)[STANDARD]
+    assert [j.tier for j in deep] == [Tier.DEEP.value]
+    assert deep[0].templates == ["/t/cve1.yaml"]
+    assert Tier.DEEP.value not in ROOT_TIERS
+
+
+def test_skipped_hosts_are_marked_alone_and_the_rest_complete():
+    items = [
+        SurfaceItem(
+            id=uuid.uuid4(), class_="root", value="https://a", host="a", port=443
+        ),
+        SurfaceItem(
+            id=uuid.uuid4(), class_="root", value="https://b", host="b", port=443
+        ),
+        SurfaceItem(
+            id=uuid.uuid4(), class_="root", value="http://c:8080", host="c", port=8080
+        ),
+    ]
+    job = Job(tier="blind", lane=STANDARD, batch=1, items=items, templates=[], rate=1)
+
+    coverage = Coverage(group=STANDARD, tier="blind", batch=1)
+    coverage.status = "partial"
+    coverage.templates_loaded = 10
+    coverage.hosts_dropped = [
+        {"host": "b:443", "reason": "x"},
+        {"host": "c:8080", "reason": "y"},
+    ]
+    dropped = nuclei_scanner._local_drops(coverage)
+    assert dropped == {"b:443", "c:8080"}
+    marks = nuclei_scanner._item_marks(job, coverage.status, dropped)
+    assert [(len(i), s) for i, s in marks] == [(1, "completed"), (2, "partial")]
+    assert marks[0][0][0].value == "https://a"
+    unmatched = nuclei_scanner._item_marks(job, "partial", frozenset({"z:443"}))
+    assert unmatched == [(items, "partial")]
+
+    budget = Coverage(group=STANDARD, tier="blind", batch=1)
+    budget.status = "partial"
+    budget.templates_loaded = 10
+    budget.error = "Stopped at the time budget. Remaining checks did not run."
+    budget.hosts_dropped = list(coverage.hosts_dropped)
+    assert nuclei_scanner._local_drops(budget) == frozenset()
+    assert nuclei_scanner._item_marks(job, "partial", frozenset()) == [
+        (items, "partial")
+    ]
 
 
 def test_the_scanner_is_registered_under_its_enum_name():

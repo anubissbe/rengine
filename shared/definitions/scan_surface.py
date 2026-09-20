@@ -39,6 +39,7 @@ class DropReason(StrEnum):
     COVERED_BY_ORIGIN = "covered_by_origin"
     NO_ANSWER = "no_answer"
     CANARY_MATCH = "canary_match"
+    CDN_EDGE = "cdn_edge"
     BUDGET = "budget"
     OVER_CAP = "over_cap"
 
@@ -49,6 +50,7 @@ DROP_REASON_LABELS: dict[str, str] = {
     DropReason.COVERED_BY_ORIGIN.value: "Covered by an equivalent web asset",
     DropReason.NO_ANSWER.value: "Did not answer",
     DropReason.CANARY_MATCH.value: "Answers like a missing page",
+    DropReason.CDN_EDGE.value: "CDN edge address, not the origin",
     DropReason.BUDGET.value: "Not reached within the time budget",
     DropReason.OVER_CAP.value: "Over the target budget",
 }
@@ -82,6 +84,7 @@ class Tier(StrEnum):
     UNIVERSAL = "universal"
     MATCHED = "matched"
     BLIND = "blind"
+    DEEP = "deep"
     SERVICES = "services"
     NAMES = "names"
     REPLAY = "replay"
@@ -96,6 +99,7 @@ TIER_ORDER: tuple[str, ...] = (
     Tier.NAMES.value,
     Tier.MATCHED.value,
     Tier.BLIND.value,
+    Tier.DEEP.value,
     Tier.REPLAY.value,
     Tier.DAST.value,
     Tier.BASES.value,
@@ -105,7 +109,8 @@ TIER_LABELS: dict[str, str] = {
     Tier.ONE_REQUEST.value: "One-request checks",
     Tier.UNIVERSAL.value: "Universal checks",
     Tier.MATCHED.value: "Checks for detected software",
-    Tier.BLIND.value: "Remaining checks",
+    Tier.BLIND.value: "Known-exploited sweep",
+    Tier.DEEP.value: "Remaining checks",
     Tier.SERVICES.value: "TLS and network checks",
     Tier.NAMES.value: "DNS checks",
     Tier.REPLAY.value: "Confirmation on equivalent web assets",
@@ -117,7 +122,8 @@ TIER_HELP: dict[str, str] = {
     Tier.ONE_REQUEST.value: "Root-page checks on every web asset. At most ten requests each.",
     Tier.UNIVERSAL.value: "Checks for any web server. One web asset per origin.",
     Tier.MATCHED.value: "Checks for the software the web asset was seen running.",
-    Tier.BLIND.value: "Checks for software not detected on the web asset. Runs last.",
+    Tier.BLIND.value: "Known-exploited and severe checks on every origin, within a request budget. Runs first.",
+    Tier.DEEP.value: "Every remaining software-specific check. Runs last and does not count toward an origin's coverage.",
     Tier.SERVICES.value: "Certificate and protocol checks on open ports.",
     Tier.NAMES.value: "Record-level checks on resolved names.",
     Tier.REPLAY.value: "A finding re-run against each web asset the origin stands for.",
@@ -162,6 +168,12 @@ BATCH_OVERRUN = 1.5
 ONE_REQUEST_PATHS = 10
 # tech groups share one invocation; the rest fold into one mixed group
 MAX_TECH_GROUPS = 12
+# request cap for a check swept across every origin
+SWEEP_REQUEST_CAP = 8
+# the blind tier's request budget per origin
+BLIND_SWEEP_REQUESTS = 940
+# the share of the rate ceiling a batch reaches
+BATCH_EFFICIENCY = 0.6
 # a request item is one per parameter set, capped per origin and per scan
 MAX_REQUESTS_PER_ORIGIN = 50
 MAX_REQUESTS = 1500
@@ -295,6 +307,35 @@ GENERIC_TAGS: frozenset[str] = frozenset(
         "sast",
         "web",
         "http",
+        # check-class tags
+        "vkev",
+        "install",
+        "installer",
+        "setup",
+        "debug",
+        "logs",
+        "log",
+        "console",
+        "status",
+        "dashboard",
+        "default-page",
+        "fpd",
+        "info-leak",
+        "listing",
+        "env",
+        "metadata",
+        "phpinfo",
+        "backdoor",
+        "eol",
+        "credentials",
+        "secret",
+        "password",
+        "discovery",
+        "time-based",
+        "time-based-sqli",
+        "fileupload",
+        "file-upload",
+        "path-traversal",
     }
 )
 
@@ -329,6 +370,25 @@ UNIVERSAL_TAGS: frozenset[str] = frozenset(
         "cache",
         "headers",
         "redirect",
+        "install",
+        "debug",
+        "logs",
+        "log",
+        "console",
+        "status",
+        "dashboard",
+        "default-page",
+        "fpd",
+        "info-leak",
+        "listing",
+        "env",
+        "metadata",
+        "phpinfo",
+        "eol",
+        "credentials",
+        "secret",
+        "password",
+        "discovery",
     }
 )
 
@@ -596,22 +656,37 @@ def normalize_tech(name: str) -> str:
     return " ".join(value.split())
 
 
+_ALIAS_PUNCT = re.compile(r"[^a-z0-9 ]+")
+
+
+def _alias_key(name: str) -> str:
+    """A tech name folded to the shape an alias is keyed by: no version, no punctuation."""
+    value = _VERSION.sub("", (name or "").strip().lower()).split("/", 1)[0]
+    value = _ALIAS_PUNCT.sub("", value)
+    return " ".join(value.split())
+
+
+_ALIAS_LOOKUP: dict[str, tuple[str, ...]] = {
+    _alias_key(name): tags for name, tags in TECH_ALIASES.items()
+}
+
+
 def tags_for_tech(name: str) -> tuple[str, ...] | None:
     """The template tags a tech name maps to; None when the name is unknown."""
-    key = normalize_tech(name)
+    key = _alias_key(name)
     if not key:
         return ()
-    if key in TECH_ALIASES:
-        return TECH_ALIASES[key]
-    return None
+    return _ALIAS_LOOKUP.get(key)
 
 
 __all__ = [
     "BASE_MAX_DEPTH",
+    "BATCH_EFFICIENCY",
     "BATCH_MAX_HOSTS",
     "BATCH_MIN_HOSTS",
     "BATCH_OVERRUN",
     "BATCH_SECONDS",
+    "BLIND_SWEEP_REQUESTS",
     "BODY_IDENTITY_BYTES",
     "CLUSTER_SIGNAL_LABELS",
     "DROP_REASON_LABELS",
@@ -626,6 +701,7 @@ __all__ = [
     "SURFACE_CLASS_HELP",
     "SURFACE_CLASS_LABELS",
     "SURFACE_STATE_LABELS",
+    "SWEEP_REQUEST_CAP",
     "TECH_ALIASES",
     "TECH_IGNORED",
     "TIER_HELP",

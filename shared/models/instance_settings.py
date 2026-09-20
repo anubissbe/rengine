@@ -60,6 +60,7 @@ class InstanceSettings(SQLModel, table=True):
     mcp_settings: dict = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
+    new_checks_swept_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

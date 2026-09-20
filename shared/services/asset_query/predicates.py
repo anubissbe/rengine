@@ -507,13 +507,19 @@ def secret_is_new(scope: ScopeLike):
 
 
 def vuln_suppressed(scope: ScopeLike):
-    """A reviewer set this finding aside."""
+    """A reviewer set this finding aside, or the finding it confirms."""
     scope = scope_of(scope)
+    source = aliased(Vulnerability)
     return exists(
-        select(1).where(
+        select(1)
+        .select_from(VulnerabilityTriage)
+        .outerjoin(source, source.id == Vulnerability.replayed_from_id)
+        .where(
             VulnerabilityTriage.target_id
             == _one_target(scope, Vulnerability.target_id),
-            VulnerabilityTriage.fingerprint == Vulnerability.fingerprint,
+            VulnerabilityTriage.fingerprint.in_(
+                [Vulnerability.fingerprint, func.coalesce(source.fingerprint, "")]
+            ),
             VulnerabilityTriage.state.in_(SUPPRESSED_STATES),
         )
     )

@@ -146,12 +146,9 @@ def test_a_fuzzing_finding_replays_the_same_request_on_each_equivalent():
     rep = uuid.uuid4()
     member = SurfaceItem(id=uuid.uuid4(), class_="root", value="https://m.example")
     plan = SurfacePlan(equivalents={"https://rep.example": [member]})
-    finding = SimpleNamespace(
-        url="https://rep.example/search?q=1",
-        matched_at="https://rep.example/search?q=1",
+    targets = scanner._replay_targets(
+        plan, "https://rep.example", "https://rep.example/search?q=1"
     )
-
-    targets = scanner._replay_targets(plan, finding)
 
     assert targets == [(member, "https://m.example/search?q=1")]
     _ = rep

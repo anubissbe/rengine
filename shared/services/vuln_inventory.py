@@ -11,13 +11,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from shared.definitions.evidence import Evidence
-from shared.definitions.vulnerabilities import SUPPRESSED_STATES
 from shared.logging import get_logger
 from shared.models.http_asset import HttpAsset
 from shared.models.port import Port
 from shared.models.subdomain import Subdomain
-from shared.models.vulnerability import Vulnerability, VulnerabilityTriage
+from shared.models.vulnerability import Vulnerability
 from shared.utils.datetime import utc_now
+from shared.utils.text import REFUSED_ROW, strip_nul
 from tools.nuclei.parser import Finding
 
 logger = get_logger(__name__)
@@ -204,16 +204,31 @@ def upsert(
 
     written = 0
     for start in range(0, len(rows), _BATCH):
-        chunk = rows[start : start + _BATCH]
-        statement = (
-            insert(Vulnerability)
-            .values(chunk)
-            .on_conflict_do_nothing(constraint="uq_vuln_scan_fingerprint")
-            .returning(Vulnerability.id)
-        )
-        written += len(session.execute(statement).scalars().all())
+        written += _insert(session, rows[start : start + _BATCH])
     session.commit()
     return written
+
+
+def _insert(session: Session, chunk: list[dict]) -> int:
+    """Insert one chunk, dropping only the rows the database refuses."""
+    try:
+        with session.begin_nested():
+            return len(session.execute(_statement(chunk)).scalars().all())
+    except REFUSED_ROW:
+        if len(chunk) == 1:
+            logger.warning("finding refused", fingerprint=chunk[0].get("fingerprint"))
+            return 0
+        half = len(chunk) // 2
+        return _insert(session, chunk[:half]) + _insert(session, chunk[half:])
+
+
+def _statement(chunk: list[dict]):
+    return (
+        insert(Vulnerability)
+        .values(chunk)
+        .on_conflict_do_nothing(constraint="uq_vuln_scan_fingerprint")
+        .returning(Vulnerability.id)
+    )
 
 
 def _source_ids(
@@ -239,46 +254,18 @@ def attach_evidence(
         return 0
     written = 0
     for fingerprint in sorted(exchanges):
-        written += session.execute(
-            update(Vulnerability)
-            .where(
-                Vulnerability.scan_id == scan_id,
-                Vulnerability.fingerprint == fingerprint,
-                Vulnerability.response.is_(None),
-            )
-            .values(response=exchanges[fingerprint])
-        ).rowcount
+        try:
+            with session.begin_nested():
+                written += session.execute(
+                    update(Vulnerability)
+                    .where(
+                        Vulnerability.scan_id == scan_id,
+                        Vulnerability.fingerprint == fingerprint,
+                        Vulnerability.response.is_(None),
+                    )
+                    .values(response=strip_nul(exchanges[fingerprint]))
+                ).rowcount
+        except REFUSED_ROW:
+            logger.warning("evidence refused", fingerprint=fingerprint)
     session.commit()
     return written
-
-
-def suppressed(session: Session, target_id: uuid.UUID) -> set[str]:
-    """Fingerprints a reviewer has already rejected or accepted for this target."""
-    return set(
-        session.execute(
-            select(VulnerabilityTriage.fingerprint).where(
-                VulnerabilityTriage.target_id == target_id,
-                VulnerabilityTriage.state.in_(SUPPRESSED_STATES),
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-
-def known_fingerprints(
-    session: Session, target_id: uuid.UUID, scan_id: uuid.UUID
-) -> set[str]:
-    """Fingerprints an earlier scan of this target already reported."""
-    return set(
-        session.execute(
-            select(Vulnerability.fingerprint)
-            .where(
-                Vulnerability.target_id == target_id,
-                Vulnerability.scan_id != scan_id,
-            )
-            .distinct()
-        )
-        .scalars()
-        .all()
-    )

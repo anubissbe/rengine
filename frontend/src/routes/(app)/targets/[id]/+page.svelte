@@ -715,6 +715,18 @@
 		}
 	}
 
+	async function setNewChecks(on: boolean) {
+		if (!target) return;
+		const before = target.new_checks;
+		target = { ...target, new_checks: on };
+		try {
+			await targetsApi.update(targetId, { new_checks: on });
+		} catch {
+			target = target ? { ...target, new_checks: before } : target;
+			toast.error('Setting not saved.');
+		}
+	}
+
 	async function handleRefreshEnrichment() {
 		if (!target) return;
 		const requests: Promise<unknown>[] = [targetsApi.refreshWhois(target.id)];
@@ -1051,6 +1063,8 @@
 									{enrichedAt}
 									seedScans={target.seed_scans}
 									onToggleSeeds={setSeedScans}
+									newChecks={target.new_checks}
+									onToggleNewChecks={setNewChecks}
 									onRefresh={handleRefreshEnrichment}
 									class={cls}
 								/>

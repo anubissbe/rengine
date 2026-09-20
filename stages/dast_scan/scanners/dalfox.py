@@ -58,6 +58,21 @@ class DalfoxScanner(VulnScanner):
             return self.skipped("This scan found no request with parameters to fuzz.")
 
         reflecting = self._reflecting(plan)
+        if reflecting is None:
+            coverage = Coverage(
+                group=self.label,
+                tier=Tier.DAST.value,
+                severities=list(ctx.cfg.severities),
+                hosts_total=len(plan.requests),
+                rate_limit=ctx.transport.rate,
+                concurrency=ctx.transport.threads,
+            )
+            coverage.status = CoverageStatus.PARTIAL.value
+            coverage.error = (
+                "The reflection probe did not complete. Nothing was fuzzed."
+            )
+            coverage.ended_at = utc_now()
+            return ScannerResult(coverage=[coverage])
         coverage = Coverage(
             group=self.label,
             tier=Tier.DAST.value,
@@ -82,7 +97,7 @@ class DalfoxScanner(VulnScanner):
         result.coverage.append(self._fuzz(reflecting, coverage))
         return result
 
-    def _reflecting(self, plan: SurfacePlan) -> list[str]:
+    def _reflecting(self, plan: SurfacePlan) -> list[str] | None:
         """One marked GET per request; keep the URLs whose marker comes back in the body."""
         ctx = self.ctx
         marker = _marker()
@@ -108,15 +123,21 @@ class DalfoxScanner(VulnScanner):
             logger.warning("reflection probe unavailable", error=str(exc))
             return list(probes.values())
         reflecting: list[str] = []
+        outcome = None
         with client.stream_probe(list(probes)) as stream:
+            outcome = stream
             for record in stream.records:
                 if ctx.aborted():
                     break
                 fields = parse_httpx_record(record)
-                url = fields.get("url")
+                key = (record.get("input") or "").strip() or fields.get("url")
                 body = fields.get("response_body") or ""
-                if url in probes and marker in body:
-                    reflecting.append(probes[url])
+                if key in probes and marker in body:
+                    reflecting.append(probes[key])
+        if outcome is not None and (
+            outcome.timed_out or outcome.return_code not in (0, None)
+        ):
+            return None
         return reflecting
 
     def _fuzz(self, urls: list[str], coverage: Coverage) -> Coverage:  # noqa: PLR0915

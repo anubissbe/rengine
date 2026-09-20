@@ -37,6 +37,7 @@ interface ScanFilterParams {
 	sort_dir?: ScanSortDir;
 	scheduled?: boolean | null;
 	include_focused?: boolean;
+	new_checks?: boolean | null;
 }
 
 interface ListScansParams extends ScanFilterParams {
@@ -57,6 +58,7 @@ function buildScanQuery(projectId: string, params: ScanFilterParams): URLSearchP
 	if (params.sort_dir) sp.append('sort_dir', params.sort_dir);
 	if (params.scheduled != null) sp.append('scheduled', String(params.scheduled));
 	if (params.include_focused) sp.append('include_focused', 'true');
+	if (params.new_checks != null) sp.append('new_checks', String(params.new_checks));
 	return sp;
 }
 

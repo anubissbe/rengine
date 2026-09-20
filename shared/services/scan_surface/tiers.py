@@ -7,13 +7,20 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from shared.definitions.scan_surface import (
+    BLIND_SWEEP_REQUESTS,
     MAX_TECH_GROUPS,
     ONE_REQUEST_PATHS,
+    SWEEP_REQUEST_CAP,
     Tier,
     is_universal,
     product_tags,
 )
-from shared.definitions.vulnerabilities import Protocol
+from shared.definitions.vulnerabilities import (
+    SEVERITY_RANK,
+    Protocol,
+    is_kev,
+    is_vkev,
+)
 
 HTTP_PROTOCOLS: frozenset[str] = frozenset(
     {Protocol.HTTP.value, Protocol.HEADLESS.value}
@@ -81,7 +88,7 @@ def split(rows: Iterable) -> TierPlan:
         paths = getattr(row, "paths", None) or []
         if getattr(row, "simple", False) and paths and set(paths) <= top:
             plan.one_request.append(row)
-        elif is_universal(row.tags):
+        elif is_universal(row.tags) and requests_of(row) <= SWEEP_REQUEST_CAP:
             plan.universal.append(row)
         else:
             plan.product.append(row)
@@ -121,9 +128,42 @@ def tech_groups(
     return out
 
 
+def requests_of(row) -> int:
+    """What one check costs against one host."""
+    return max(1, int(getattr(row, "requests", 1) or 1))
+
+
+def _blind_rank(row) -> tuple:
+    """Known-exploited first, then severity, then cheapest."""
+    tags = getattr(row, "tags", None)
+    return (
+        0 if is_kev(tags) else 1 if is_vkev(tags) else 2,
+        SEVERITY_RANK.get(getattr(row, "severity", ""), len(SEVERITY_RANK)),
+        requests_of(row),
+    )
+
+
+def blind_order(rows: Iterable) -> list:
+    """The product checks ranked known-exploited first, then severity, then cheapest."""
+    return sorted(rows, key=_blind_rank)
+
+
+def blind_core(rows: Iterable, budget: int = BLIND_SWEEP_REQUESTS) -> list:
+    """The product checks worth sweeping where the software was never identified."""
+    out: list = []
+    spent = 0
+    for row in blind_order(rows):
+        price = requests_of(row)
+        if price > SWEEP_REQUEST_CAP or spent + price > budget:
+            continue
+        out.append(row)
+        spent += price
+    return out
+
+
 def cost(rows: Iterable) -> int:
     """Requests per host, an upper bound before nuclei clusters."""
-    return sum(max(1, int(getattr(row, "requests", 1) or 1)) for row in rows)
+    return sum(requests_of(row) for row in rows)
 
 
 TIER_OF_GROUP: dict[str, str] = {
@@ -144,7 +184,10 @@ __all__ = [
     "TIER_OF_GROUP",
     "TechGroup",
     "TierPlan",
+    "blind_core",
+    "blind_order",
     "cost",
+    "requests_of",
     "split",
     "tech_groups",
     "top_paths",

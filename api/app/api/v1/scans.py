@@ -169,6 +169,9 @@ async def list_scans(
         bool, Query(description="Include focused rescans")
     ] = False,
     parent_id: Annotated[UUID | None, Query(description="Rescans of this scan")] = None,
+    new_checks: Annotated[
+        bool | None, Query(description="New checks runs only, or none of them")
+    ] = None,
 ):
     query = service.build_list_query(
         project_id=project_id,
@@ -183,6 +186,7 @@ async def list_scans(
         sort_dir=sort_dir,
         scheduled=scheduled,
         include_focused=include_focused,
+        new_checks=new_checks,
     )
     page = await paginate(
         session,
@@ -279,6 +283,7 @@ async def export_scans(
     sort_dir: Annotated[ScanSortDir, Query()] = "desc",
     scheduled: Annotated[bool | None, Query()] = None,
     include_focused: Annotated[bool, Query()] = False,
+    new_checks: Annotated[bool | None, Query()] = None,
 ):
     return await service.export_rows(
         project_id=project_id,
@@ -292,6 +297,7 @@ async def export_scans(
         sort_dir=sort_dir,
         scheduled=scheduled,
         include_focused=include_focused,
+        new_checks=new_checks,
     )
 
 

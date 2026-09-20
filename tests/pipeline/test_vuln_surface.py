@@ -46,6 +46,7 @@ def test_the_blind_sweep_is_on_by_default_and_a_launch_knob():
     assert "blind_sweep" in stage_by_name()["vulnerability_scan"].launch_fields
 
 
-def test_the_blind_tier_runs_last_among_the_root_tiers():
-    assert ROOT_TIERS[-1] == Tier.BLIND.value
+def test_the_root_tiers_carry_the_blind_sweep_but_never_the_deep_one():
+    assert Tier.BLIND.value in ROOT_TIERS
+    assert Tier.DEEP.value not in ROOT_TIERS
     assert ROOT_TIERS[0] == Tier.ONE_REQUEST.value

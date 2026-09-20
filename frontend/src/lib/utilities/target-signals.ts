@@ -1,6 +1,6 @@
 export type SortKey = 'updated' | 'created' | 'name' | 'type' | 'expiry' | 'enrichment';
 export type SortDir = 'asc' | 'desc';
-export type SignalFilter = 'expiring' | 'attention' | 'awaiting' | 'enriched';
+export type SignalFilter = 'expiring' | 'attention' | 'awaiting' | 'enriched' | 'monitored';
 
 export interface TargetSummary {
 	total: number;
@@ -8,4 +8,5 @@ export interface TargetSummary {
 	attention: number;
 	awaiting: number;
 	enriched: number;
+	monitored: number;
 }

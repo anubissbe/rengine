@@ -6,7 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import and_, select
 
-from shared.definitions.scan_surface import BATCH_MAX_HOSTS, Tier
+from shared.definitions.scan_surface import SWEEP_REQUEST_CAP, Tier
 from shared.definitions.vulnerabilities import (
     DAST_ROOT,
     WEAK_MATCHER_PATHS,
@@ -21,8 +21,8 @@ from shared.services.scan_surface import (
     by_origin,
     chunk,
     cost,
-    parse_root,
 )
+from shared.services.scan_surface.tiers import requests_of
 from shared.services.vuln_templates import selection_predicate
 from stages.vulnerability_scan.scanners.base import ScannerResult
 from stages.vulnerability_scan.scanners.nuclei import (
@@ -33,7 +33,6 @@ from stages.vulnerability_scan.scanners.nuclei import (
     _deadline,
     _resolve,
 )
-from tools.nuclei.parser import Finding
 
 _EXPOSURE_SET = "exposure"
 _REQUESTS_PER_INVOCATION = 100
@@ -67,6 +66,7 @@ def exposure_templates(session, cfg) -> list[VulnTemplate]:
         row
         for row in rows
         if row.protocol == Protocol.HTTP.value
+        and requests_of(row) <= SWEEP_REQUEST_CAP
         and any(p != _BASE_URL and p.startswith(_BASE_URL) for p in row.paths or [])
     ]
 
@@ -148,7 +148,7 @@ class NucleiDastScanner(NucleiScanner):
                             tier=Tier.BASES.value,
                             lane=lane,
                             batch=0,
-                            items=items[:BATCH_MAX_HOSTS],
+                            items=items,
                             templates=files,
                             rate=rates[lane],
                             cost=per_host,
@@ -156,17 +156,17 @@ class NucleiDastScanner(NucleiScanner):
                     )
         return lanes
 
+    @staticmethod
     def _replay_targets(
-        self, plan: SurfacePlan, finding: Finding
+        plan: SurfacePlan, root: str, locator: str | None
     ) -> list[tuple[SurfaceItem, str]]:
         """The same request on each web asset the origin stands for."""
-        url = finding.url or finding.matched_at
-        root = parse_root(url)
-        if root is None or "://" not in url:
+        url = locator or ""
+        if "://" not in url:
             return []
         parsed = urlsplit(url)
         out: list[tuple[SurfaceItem, str]] = []
-        for member in plan.members_of(root.value):
+        for member in plan.members_of(root):
             netloc = urlsplit(member.value).netloc
             target = urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, ""))
             out.append((member, target))

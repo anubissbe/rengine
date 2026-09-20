@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.definitions.new_checks import TEMPLATES_MARK_KEY
 from shared.definitions.vulnerabilities import (
     HEADLESS_SETS,
     PROTOCOL_LABELS,
@@ -25,6 +28,7 @@ from shared.models.vuln_template import (
     TemplateFilter,
     TemplateLibraryStats,
     TemplatePage,
+    TemplateSeen,
     TemplateSelection,
     TemplateSetSpec,
     TemplateSource,
@@ -37,6 +41,7 @@ from shared.models.vuln_template import (
     VulnTemplateUploadResult,
 )
 from shared.models.vulnerability import Vulnerability
+from shared.models.watch import UserMark
 from shared.services.celery_dispatch import dispatch_template_sync
 from shared.services.vuln_templates import (
     TemplateError,
@@ -128,7 +133,41 @@ class VulnTemplateService:
             updated_at=row.updated_at,
         )
 
-    async def stats(self) -> TemplateLibraryStats:
+    async def seen_at(self, user_id: UUID) -> datetime | None:
+        return await self.session.scalar(
+            select(UserMark.marked_at).where(
+                UserMark.user_id == user_id, UserMark.key == TEMPLATES_MARK_KEY
+            )
+        )
+
+    async def mark_seen(self, user_id: UUID) -> TemplateSeen:
+        before = await self.seen_at(user_id)
+        now = utc_now()
+        stmt = pg_insert(UserMark).values(
+            user_id=user_id, key=TEMPLATES_MARK_KEY, marked_at=now
+        )
+        await self.session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["user_id", "key"], set_={"marked_at": now}
+            )
+        )
+        await self.session.commit()
+        return TemplateSeen(seen_at=before, marked_at=now)
+
+    async def stats(self, user_id: UUID | None = None) -> TemplateLibraryStats:
+        seen = await self.seen_at(user_id) if user_id is not None else None
+        new = 0
+        if seen is not None:
+            new = int(
+                await self.session.scalar(
+                    select(func.count(VulnTemplate.id)).where(
+                        VulnTemplate.origin == TemplateOrigin.OFFICIAL.value,
+                        VulnTemplate.enabled.is_(True),
+                        VulnTemplate.created_at > seen,
+                    )
+                )
+                or 0
+            )
         total = int(await self.session.scalar(select(func.count(VulnTemplate.id))) or 0)
         by_origin = {
             origin: int(count)
@@ -200,6 +239,8 @@ class VulnTemplateService:
                 for name, count in tags
             ],
             fired=int(fired or 0),
+            new=new,
+            seen_at=seen,
             last_synced_at=last,
         )
 
@@ -233,6 +274,12 @@ class VulnTemplateService:
         )
         if f.fired:
             query = query.where(hits.c.findings > 0)
+        if f.new_since is not None:
+            query = query.where(
+                VulnTemplate.origin == TemplateOrigin.OFFICIAL.value,
+                VulnTemplate.enabled.is_(True),
+                VulnTemplate.created_at > f.new_since,
+            )
         if f.origins:
             query = query.where(VulnTemplate.origin.in_(f.origins))
         if f.severities:
@@ -264,11 +311,12 @@ class VulnTemplateService:
         total = await self.session.scalar(
             select(func.count()).select_from(query.subquery())
         )
-        ordering = (
-            [findings.desc(), VulnTemplate.name]
-            if f.fired
-            else [VulnTemplate.origin, VulnTemplate.name]
-        )
+        if f.new_since is not None:
+            ordering = [VulnTemplate.created_at.desc(), VulnTemplate.name]
+        elif f.fired:
+            ordering = [findings.desc(), VulnTemplate.name]
+        else:
+            ordering = [VulnTemplate.origin, VulnTemplate.name]
         rows = await self.session.execute(
             query.order_by(*ordering).limit(f.limit).offset(f.offset)
         )

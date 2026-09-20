@@ -122,6 +122,9 @@ def _as_float(value: Any) -> float | None:
 
 
 def _protocol_of(document: dict) -> str:
+    # a headless block needs -headless
+    if "headless" in document:
+        return Protocol.HEADLESS.value
     for key, protocol in _PROTOCOL_KEYS:
         if key in document:
             return protocol
@@ -432,6 +435,19 @@ def index_directory(session: Session, root: Path, origin: str) -> int:
             continue
         rows.append(_row(parsed, origin=origin, path=relative, raw=None))
 
+    # created_at is when the library first held the check
+    known = dict(
+        session.execute(
+            select(VulnTemplate.template_id, VulnTemplate.created_at).where(
+                VulnTemplate.origin == origin
+            )
+        ).all()
+    )
+    for row in rows:
+        kept = known.get(row["template_id"])
+        if kept is not None:
+            row["created_at"] = kept
+
     session.execute(delete(VulnTemplate).where(VulnTemplate.origin == origin))
     for start in range(0, len(rows), 1000):
         session.execute(VulnTemplate.__table__.insert(), rows[start : start + 1000])
@@ -501,6 +517,9 @@ def selection_predicate(selection: TemplateSelection, *, official_only: bool = T
     if official_only:
         clauses.append(VulnTemplate.origin == TemplateOrigin.OFFICIAL.value)
     clauses.append(VulnTemplate.severity.in_(list(selection.severities)))
+    clauses.append(
+        VulnTemplate.severity.notin_([Severity.INFO.value, Severity.UNKNOWN.value])
+    )
     chosen = _set_predicate(selection.template_sets)
     extra = _tags_overlap(selection.include_tags)
     reach = [c for c in (chosen, extra) if c is not None]
@@ -515,6 +534,8 @@ def selection_predicate(selection: TemplateSelection, *, official_only: bool = T
         clauses.append(
             VulnTemplate.template_id.notin_(list(selection.exclude_templates))
         )
+    if selection.template_ids:
+        clauses.append(VulnTemplate.template_id.in_(list(selection.template_ids)))
     if not selection.headless:
         clauses.append(VulnTemplate.protocol != Protocol.HEADLESS.value)
     clauses.append(VulnTemplate.protocol != Protocol.FILE.value)

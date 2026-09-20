@@ -209,6 +209,13 @@
 				remove: () => scansStore.setScheduleMode('all')
 			});
 		}
+		if (f.newChecks) {
+			chips.push({
+				key: 'new_checks',
+				label: 'New checks runs',
+				remove: () => scansStore.setScheduleMode('all')
+			});
+		}
 		return chips;
 	});
 

@@ -52,7 +52,7 @@ class DastScanConfig(StageConfig):
         ge=0,
         le=1440,
         title="Time budget (min)",
-        description="Stop starting batches after this many minutes. 0 means no limit.",
+        description="Stop starting batches after this many minutes. 0 runs until the system time limit.",
     )
     max_requests_per_origin: int = advanced(
         MAX_REQUESTS_PER_ORIGIN,

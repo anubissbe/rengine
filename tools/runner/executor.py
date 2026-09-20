@@ -52,17 +52,28 @@ def _flag_name(token: str) -> str:
 
 
 def merge_extra_args(
-    args: list[str], extra: list[str], reserved: tuple[str, ...] = ()
+    args: list[str],
+    extra: list[str],
+    reserved: tuple[str, ...] = (),
+    aliases: dict[str, str] | None = None,
 ) -> list[str]:
-    """Tool args, minus any flag the stage already set."""
-    taken = {_flag_name(a) for a in args if a.startswith("-")} | set(reserved)
+    """Tool args, minus any flag the stage already set, under either spelling."""
+    names = aliases or {}
+
+    def canonical(token: str) -> str:
+        name = _flag_name(token)
+        return names.get(name, name)
+
+    taken = {canonical(a) for a in args if a.startswith("-")} | {
+        names.get(r, r) for r in reserved if r
+    }
     out: list[str] = []
     skip = False
     for index, token in enumerate(extra):
         if skip:
             skip = False
             continue
-        if token.startswith("-") and _flag_name(token) in taken:
+        if token.startswith("-") and canonical(token) in taken:
             following = extra[index + 1] if index + 1 < len(extra) else None
             skip = (
                 "=" not in token
@@ -152,7 +163,9 @@ def _run_process(
     if stopped:
         raise StageAbortedError
     if timed_out:
-        raise subprocess.TimeoutExpired(cmd, timeout or 0)
+        raise subprocess.TimeoutExpired(
+            cmd, timeout or 0, output="".join(out), stderr="".join(err)
+        )
     return subprocess.CompletedProcess(
         cmd,
         proc.returncode if proc.returncode is not None else -1,
@@ -172,7 +185,7 @@ class ToolExecutionError(Exception):
 _MAX_STDOUT_AS_ERROR = 2000
 
 
-def _failure_excerpt(stderr: str | None, stdout: str | None) -> str:
+def failure_excerpt(stderr: str | None, stdout: str | None) -> str:
     text = (stderr or "").strip()
     if text:
         return text[:500]
@@ -190,12 +203,14 @@ class CLIToolRunner:
         recorder: CommandRecorder | None = None,
         tool: str | None = None,
         extra_args: list[str] | None = None,
+        aliases: dict[str, str] | None = None,
     ) -> None:
         self.binary = binary
         self.default_timeout = default_timeout
         self._recorder = recorder
         self._tool = tool
         self._extra_args = extra_args or []
+        self._aliases = dict(aliases or {})
         self._binary_path: str | None = None
         self._verify_binary()
 
@@ -240,6 +255,7 @@ class CLIToolRunner:
                 args,
                 extra_args if extra_args is not None else self._extra_args,
                 (input_flag, output_flag, json_flag, silent_flag),
+                self._aliases,
             )
         )
 
@@ -315,7 +331,7 @@ class CLIToolRunner:
             success = process_result.returncode == 0
             error = None
             if not success:
-                excerpt = _failure_excerpt(process_result.stderr, process_result.stdout)
+                excerpt = failure_excerpt(process_result.stderr, process_result.stdout)
                 error = (
                     f"{self.binary} exited with code {process_result.returncode}"
                     + (f": {excerpt}" if excerpt else "")
@@ -346,12 +362,14 @@ class CLIToolRunner:
             _finish(-1, "", f"{self.binary} stopped: the scan was halted")
             raise
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             duration = time.monotonic() - start_time
             logger.error(f"{self.binary} timed out after {timeout}s")
             timeout_error = f"{self.binary} timed out after {timeout} seconds"
             raw_output = self._read_output(
-                output_file=output_file, stdout="", use_output_file=use_output_file
+                output_file=output_file,
+                stdout=str(exc.output or ""),
+                use_output_file=use_output_file,
             )
             partial_lines, partial_records = self._parse(raw_output, output_format)
             _finish(-1, "", timeout_error)
@@ -404,6 +422,7 @@ class CLIToolRunner:
                 args,
                 extra_args if extra_args is not None else self._extra_args,
                 (input_flag, json_flag, silent_flag),
+                self._aliases,
             )
         )
 

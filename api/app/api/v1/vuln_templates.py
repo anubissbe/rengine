@@ -22,6 +22,7 @@ from shared.models.vuln_template import (
     TemplateFilter,
     TemplateLibraryStats,
     TemplatePage,
+    TemplateSeen,
     TemplateSelection,
     TemplateSource,
     TemplateSourceUpdate,
@@ -77,10 +78,19 @@ async def template_vocabulary(_current_user: CurrentUser) -> dict:
 
 @router.get("/stats", response_model=TemplateLibraryStats)
 async def library_stats(
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
     service: Annotated[VulnTemplateService, Depends(get_service)],
 ):
-    return await service.stats()
+    return await service.stats(current_user.id)
+
+
+@router.post("/seen", response_model=TemplateSeen)
+async def templates_seen(
+    current_user: CurrentUser,
+    service: Annotated[VulnTemplateService, Depends(get_service)],
+):
+    """Record that the user has looked at the library."""
+    return await service.mark_seen(current_user.id)
 
 
 @router.post("/search", response_model=TemplatePage)

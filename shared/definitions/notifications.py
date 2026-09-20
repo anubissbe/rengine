@@ -540,6 +540,84 @@ class WatchAlert:
     repeat: bool = False
 
 
+@dataclass
+class NewChecksSweep:
+    templates: int
+    targets: int
+    busy: int = 0
+    waiting: int = 0
+    skipped: int = 0
+
+
+def new_checks_started(sweep: NewChecksSweep) -> dict | None:
+    """One message per project when the library gained checks and follow-up runs started."""
+    if sweep.templates <= 0:
+        return None
+    noun = "check" if sweep.templates == 1 else "checks"
+    lines = [
+        f"Follow-up runs started for {sweep.targets} "
+        f"{'target' if sweep.targets == 1 else 'targets'}."
+    ]
+    if sweep.busy:
+        lines.append(
+            f"{sweep.busy} {'target' if sweep.busy == 1 else 'targets'} skipped: "
+            "a scan is running."
+        )
+    if sweep.waiting:
+        lines.append(
+            f"{sweep.waiting} {'target waits' if sweep.waiting == 1 else 'targets wait'} "
+            "for a completed scan."
+        )
+    if sweep.skipped:
+        lines.append(
+            f"{sweep.skipped} {'target' if sweep.skipped == 1 else 'targets'} had "
+            "nothing to run: no applicable check, no web asset, or passive intensity."
+        )
+    return {
+        "type": NotificationType.NEW_CHECKS,
+        "severity": NotificationSeverity.INFO,
+        "title": f"{sweep.templates} new {noun} in the library",
+        "message": "\n".join(lines),
+        "metadata": {"url": "/arsenal?tab=nuclei"},
+    }
+
+
+@dataclass
+class NewChecksResult:
+    scan_id: str
+    target: str
+    checks: int
+    findings: int
+    by_severity: dict[str, int] = field(default_factory=dict)
+
+
+def new_checks_result(result: NewChecksResult) -> dict | None:
+    """One message per follow-up run that found something."""
+    if result.findings <= 0:
+        return None
+    counts = [
+        f"{n} {sev}" for sev in SEVERITY_ORDER if (n := result.by_severity.get(sev, 0))
+    ]
+    checks = (
+        f"{result.checks} new {'check' if result.checks == 1 else 'checks'} tested."
+    )
+    found = f"{result.findings} {'finding' if result.findings == 1 else 'findings'}"
+    if counts:
+        found += ": " + ", ".join(counts)
+    severity = NotificationSeverity.INFO
+    if result.by_severity.get(Severity.CRITICAL.value):
+        severity = NotificationSeverity.ERROR
+    elif result.by_severity.get(Severity.HIGH.value):
+        severity = NotificationSeverity.WARNING
+    return {
+        "type": NotificationType.NEW_CHECKS,
+        "severity": severity,
+        "title": f"New checks · {result.target}",
+        "message": f"{checks}\n{found}.",
+        "metadata": _scan_meta(result.scan_id, "vulnerabilities"),
+    }
+
+
 def watch_alert(alert: WatchAlert) -> dict:
     """One message per new in-scope host, again only when the host changes."""
     head = "Changed in-scope asset" if alert.repeat else "New in-scope asset"

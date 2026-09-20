@@ -280,6 +280,7 @@ class TargetService:
             "attention": row.attention,
             "awaiting": row.awaiting,
             "enriched": row.enriched,
+            "monitored": row.monitored,
         }
 
     async def get_matching_target_ids(
@@ -749,6 +750,8 @@ class TargetService:
 
         if target_in.seed_scans is not None:
             target.seed_scans = target_in.seed_scans
+        if target_in.new_checks is not None:
+            target.new_checks = target_in.new_checks
 
         target.updated_at = utc_now()
         await self.session.commit()

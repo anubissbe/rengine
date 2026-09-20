@@ -53,8 +53,10 @@ def test_no_window_leaves_nuclei_on_its_own_defaults():
     assert "-interactions-cooldown-period" not in args
 
 
-def test_the_default_waits_minutes_not_seconds():
-    assert OAST_WAIT_SECONDS >= 60
+def test_the_default_cooldown_is_short_so_it_does_not_cripple_completion():
+    # nuclei sleeps this at the end of every OAST batch; a long wait crippled a batched scan.
+    # post-batch wait for out-of-band callbacks
+    assert 0 < OAST_WAIT_SECONDS <= 30
 
 
 def test_the_token_reaches_nuclei():

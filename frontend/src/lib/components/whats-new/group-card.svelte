@@ -171,6 +171,9 @@
 			{:else}
 				<span class="truncate text-sm">{subject.label}</span>
 			{/if}
+			{#if group.run_label}
+				<Badge variant="info">{group.run_label}</Badge>
+			{/if}
 			{#if subject.kind === SubjectKind.PROGRAM && subject.platform}
 				<Badge variant="outline">{bountyVocabulary.label(subject.platform)}</Badge>
 				{#if subject.watched}<Badge variant="info">Watched</Badge>{/if}

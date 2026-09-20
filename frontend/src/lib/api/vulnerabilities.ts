@@ -20,6 +20,7 @@ import type {
 	TemplatePage,
 	TemplateSelection,
 	TemplateSource,
+	TemplateSeen,
 	TemplateSyncResult,
 	VulnTemplateRead,
 	VulnTemplateUploadResult
@@ -127,6 +128,10 @@ export const vulnTemplatesApi = {
 
 	async sync(): Promise<TemplateSyncResult> {
 		return api.post<TemplateSyncResult>('/vuln-templates/sync', {});
+	},
+
+	async seen(): Promise<TemplateSeen> {
+		return api.post<TemplateSeen>('/vuln-templates/seen', {});
 	},
 
 	async upload(files: { filename: string; content: string }[]): Promise<VulnTemplateUploadResult> {

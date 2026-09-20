@@ -3,7 +3,11 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import CornerDownLeft from '@lucide/svelte/icons/corner-down-left';
+	import Info from '@lucide/svelte/icons/info';
 	import Play from '@lucide/svelte/icons/play';
+	import Hint from '$lib/components/hint.svelte';
+	import { Switch } from '$lib/components/ui/switch';
+	import { NEW_CHECKS_HELP, NEW_CHECKS_TITLE } from '$lib/config/new-checks';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Kbd from '$lib/components/ui/kbd';
 	import { Button } from '$lib/components/ui/button';
@@ -260,6 +264,22 @@
 		if (presetContextId) launch.contextId = presetContextId;
 	}
 
+	let prefilledFor = '';
+	$effect(() => {
+		const only = launch.targets.length === 1 ? launch.targets[0] : null;
+		const id = only?.id ?? null;
+		if (!id || id === prefilledFor) return;
+		prefilledFor = id;
+		void targetsApi
+			.get(id)
+			.then((t) => {
+				if (launch.targets.length === 1 && launch.targets[0].id === id) {
+					launch.newChecks = t.new_checks;
+				}
+			})
+			.catch(() => undefined);
+	});
+
 	async function loadTargets(projectSlug: string) {
 		const ids = targetId ? [targetId] : [...(targetIds ?? [])];
 		const values = [...(targetValues ?? [])];
@@ -426,6 +446,25 @@
 						disabled={launching}
 						onNewContext={() => (view = 'newContext')}
 					/>
+
+					{#if launch.vulnerabilitiesOn}
+						<div class="flex items-center gap-2">
+							<Switch
+								id="launch-new-checks"
+								checked={launch.newChecks === true}
+								onCheckedChange={(on) => (launch.newChecks = on)}
+								disabled={launching}
+							/>
+							<Label for="launch-new-checks" class="font-normal">{NEW_CHECKS_TITLE}</Label>
+							<Hint text={NEW_CHECKS_HELP}>
+								{#snippet child(props)}
+									<span {...props} class="flex h-5 items-center text-muted-foreground">
+										<Info class="size-3.5" />
+									</span>
+								{/snippet}
+							</Hint>
+						</div>
+					{/if}
 
 					<LaunchSummary {launch} {preview} {previewLoading} bind:open={whatRunsOpen} />
 				</div>

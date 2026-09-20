@@ -86,6 +86,7 @@ export interface Target extends TargetBase {
 	organizations: OrganizationSummary[];
 	tags: TagSummary[];
 	seed_scans: boolean;
+	new_checks: boolean;
 	seed_count: number | null;
 }
 
@@ -122,6 +123,7 @@ export interface TargetUpdate {
 	organization_names?: string[] | null;
 	tag_names?: string[] | null;
 	seed_scans?: boolean | null;
+	new_checks?: boolean | null;
 }
 
 export interface TargetValidationRequest {

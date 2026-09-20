@@ -13,7 +13,7 @@ from shared.models.target import TargetOrganization
 from shared.models.whois import WhoisRecord
 from shared.utils.datetime import utc_now
 
-SignalName = Literal["expiring", "attention", "awaiting", "enriched"]
+SignalName = Literal["expiring", "attention", "awaiting", "enriched", "monitored"]
 SortKey = Literal["updated", "created", "name", "type", "expiry", "enrichment"]
 SortDir = Literal["asc", "desc"]
 
@@ -74,11 +74,16 @@ def attention_expr() -> ColumnElement[bool]:
     return or_(failed_expr(), expiring_expr())
 
 
+def monitored_expr() -> ColumnElement[bool]:
+    return Target.new_checks.is_(True)
+
+
 _SIGNAL_EXPR = {
     "expiring": expiring_expr,
     "attention": attention_expr,
     "awaiting": awaiting_expr,
     "enriched": enriched_expr,
+    "monitored": monitored_expr,
 }
 
 
@@ -194,5 +199,8 @@ def signal_count_columns() -> list:
         ),
         func.coalesce(func.sum(case((enriched_expr(), 1), else_=0)), 0).label(
             "enriched"
+        ),
+        func.coalesce(func.sum(case((monitored_expr(), 1), else_=0)), 0).label(
+            "monitored"
         ),
     ]
