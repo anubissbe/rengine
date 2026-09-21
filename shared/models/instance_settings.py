@@ -10,6 +10,11 @@ from shared.definitions.bounty_programs import (
     DEFAULT_FEED_INTERVAL,
     DEFAULT_SYNC_INTERVAL,
 )
+from shared.definitions.oast import (
+    DEFAULT_WAIT_SECONDS,
+    MAX_SERVER_LENGTH,
+    OastMode,
+)
 from shared.enums.instance import InstanceMode
 from shared.utils.datetime import utc_now
 
@@ -61,6 +66,10 @@ class InstanceSettings(SQLModel, table=True):
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
     new_checks_swept_at: datetime | None = Field(default=None)
+    oast_mode: str = Field(default=OastMode.OFF.value, max_length=16)
+    oast_server: str | None = Field(default=None, max_length=MAX_SERVER_LENGTH)
+    oast_public_acknowledged: bool = Field(default=False)
+    oast_wait_seconds: int = Field(default=DEFAULT_WAIT_SECONDS)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

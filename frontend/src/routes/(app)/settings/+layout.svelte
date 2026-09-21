@@ -4,6 +4,7 @@
 	import Settings2Icon from '@lucide/svelte/icons/settings-2';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import RouteIcon from '@lucide/svelte/icons/route';
+	import SatelliteDishIcon from '@lucide/svelte/icons/satellite-dish';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import AwardIcon from '@lucide/svelte/icons/award';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
@@ -21,6 +22,7 @@
 		general: Settings2Icon,
 		'api-keys': KeyRoundIcon,
 		proxies: RouteIcon,
+		oast: SatelliteDishIcon,
 		notifications: BellIcon,
 		'bounty-hub': AwardIcon,
 		ai: CpuIcon,

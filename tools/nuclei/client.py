@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from shared.definitions.oast import EVICTION_SLACK
 from shared.logging import get_logger
 from shared.services.scan_resolve import redact_command
 from tools.nuclei.parser import Finding, parse_finding
@@ -66,7 +67,6 @@ NUCLEI_ALIASES: dict[str, str] = {
     "-ss": "-scan-strategy",
     "-t": "-templates",
 }
-_EVICTION_SLACK = 120
 
 _DROPPED = re.compile(
     r"Skipped\s+(?P<host>\S+)\s+from target list as found unresponsive\s+"
@@ -151,7 +151,7 @@ def _oast_args(opt: NucleiOptions) -> list[str]:
             "-interactions-cooldown-period",
             str(opt.oast_wait_seconds),
             "-interactions-eviction",
-            str(opt.oast_wait_seconds + _EVICTION_SLACK),
+            str(opt.oast_wait_seconds + EVICTION_SLACK),
         ]
     return args
 

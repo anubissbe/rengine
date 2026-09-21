@@ -27,7 +27,7 @@ def _resolve(prop: dict, defs: dict) -> dict:
     return {**target, **prop} if isinstance(target, dict) else prop
 
 
-def _field_specs(spec) -> list[StageField]:
+def _field_specs(spec, unavailable: dict[str, str]) -> list[StageField]:
     schema = spec.schema
     defs = schema.get("$defs") or {}
     defaults = spec.defaults
@@ -37,6 +37,7 @@ def _field_specs(spec) -> list[StageField]:
     for name, raw in (schema.get("properties") or {}).items():
         prop = _resolve(raw, defs)
         options = prop.get("enum") or prop.get("options")
+        needs = prop.get("needs")
         out.append(
             StageField(
                 name=name,
@@ -52,6 +53,8 @@ def _field_specs(spec) -> list[StageField]:
                 widget=prop.get("widget"),
                 kind=prop.get("kind"),
                 launch=name in launch,
+                needs=needs,
+                unavailable_reason=unavailable.get(needs) if needs else None,
             )
         )
     return out
@@ -69,7 +72,8 @@ def _transport(spec) -> StageTransport | None:
     )
 
 
-def build_catalog() -> EngineCatalog:
+def build_catalog(unavailable: dict[str, str] | None = None) -> EngineCatalog:
+    unavailable = unavailable or {}
     return EngineCatalog(
         phases=[phase for phase, _ in phases()],
         stages=[
@@ -93,7 +97,7 @@ def build_catalog() -> EngineCatalog:
                 produces=sorted(spec.produces),
                 transport=_transport(spec),
                 defaults=spec.defaults,
-                fields=_field_specs(spec),
+                fields=_field_specs(spec, unavailable),
             )
             for spec in stages()
             if not spec.catalog_hidden

@@ -71,6 +71,8 @@ export interface StageField {
 	widget: string | null;
 	kind: string | null;
 	launch: boolean;
+	needs: string | null;
+	unavailable_reason: string | null;
 }
 
 export interface StageTransport {

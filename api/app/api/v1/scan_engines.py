@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
 from app.core.database import get_session
+from app.services.oast import instance_reason
 from app.services.scan_engine import ScanEngineService, build_catalog, preview_engine
 from shared.models.scan_engine import (
     EngineCatalog,
@@ -16,6 +17,7 @@ from shared.models.scan_engine import (
     ScanEngineRead,
     ScanEngineUpdate,
 )
+from stages.config import FieldNeeds
 
 router = APIRouter(
     prefix="/engines",
@@ -34,8 +36,12 @@ class YamlBody(BaseModel):
 
 
 @router.get("/catalog", response_model=EngineCatalog)
-async def engine_catalog(_current_user: CurrentUser):
-    return build_catalog()
+async def engine_catalog(
+    _current_user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    reason = await instance_reason(session)
+    return build_catalog({FieldNeeds.OAST.value: reason} if reason else None)
 
 
 @router.post("/preview", response_model=EnginePreviewResult)

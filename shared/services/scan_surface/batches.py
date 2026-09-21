@@ -26,8 +26,10 @@ def chunk[T](items: Sequence[T], size: int) -> list[list[T]]:
     return [list(items[i : i + size]) for i in range(0, len(items), size)]
 
 
-def batches[T](items: Iterable[T], cost_per_host: int, rate: int) -> list[list[T]]:
-    return chunk(list(items), batch_size(cost_per_host, rate))
+def batches[T](
+    items: Iterable[T], cost_per_host: int, rate: int, seconds: int = BATCH_SECONDS
+) -> list[list[T]]:
+    return chunk(list(items), batch_size(cost_per_host, rate, seconds))
 
 
 __all__ = ["batch_size", "batches", "chunk"]

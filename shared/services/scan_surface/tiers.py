@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from shared.definitions.oast import OAST_TAG
 from shared.definitions.scan_surface import (
     BLIND_SWEEP_REQUESTS,
     MAX_TECH_GROUPS,
@@ -41,6 +42,7 @@ class TierPlan:
     one_request: list = field(default_factory=list)
     universal: list = field(default_factory=list)
     product: list = field(default_factory=list)
+    oast: list = field(default_factory=list)
     services: list = field(default_factory=list)
     names: list = field(default_factory=list)
     unrunnable: list = field(default_factory=list)
@@ -54,7 +56,12 @@ class TierPlan:
 
     @property
     def http_count(self) -> int:
-        return len(self.one_request) + len(self.universal) + len(self.product)
+        return (
+            len(self.one_request)
+            + len(self.universal)
+            + len(self.product)
+            + len(self.oast)
+        )
 
 
 def top_paths(rows: Iterable, limit: int = ONE_REQUEST_PATHS) -> list[str]:
@@ -66,6 +73,13 @@ def top_paths(rows: Iterable, limit: int = ONE_REQUEST_PATHS) -> list[str]:
         for path in getattr(row, "paths", None) or ():
             counts[path] += 1
     return [path for path, _ in counts.most_common(limit)]
+
+
+def wants_callback(row) -> bool:
+    """A check nuclei refuses to run with no out-of-band client behind it."""
+    if getattr(row, "needs_oast", False):
+        return True
+    return OAST_TAG in {str(t).lower() for t in getattr(row, "tags", None) or ()}
 
 
 def split(rows: Iterable) -> TierPlan:
@@ -84,6 +98,9 @@ def split(rows: Iterable) -> TierPlan:
             continue
         if protocol not in HTTP_PROTOCOLS:
             plan.unrunnable.append(row)
+            continue
+        if wants_callback(row):
+            plan.oast.append(row)
             continue
         paths = getattr(row, "paths", None) or []
         if getattr(row, "simple", False) and paths and set(paths) <= top:
@@ -168,6 +185,7 @@ def cost(rows: Iterable) -> int:
 
 TIER_OF_GROUP: dict[str, str] = {
     "one_request": Tier.ONE_REQUEST.value,
+    "oast": Tier.OAST.value,
     "universal": Tier.UNIVERSAL.value,
     "product": Tier.BLIND.value,
     "services": Tier.SERVICES.value,

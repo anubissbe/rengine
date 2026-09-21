@@ -40,6 +40,7 @@ from shared.services.scan_surface.tiers import (
     split,
     tech_groups,
     top_paths,
+    wants_callback,
 )
 
 __all__ = [
@@ -76,5 +77,6 @@ __all__ = [
     "split_members",
     "tech_groups",
     "top_paths",
+    "wants_callback",
     "write",
 ]

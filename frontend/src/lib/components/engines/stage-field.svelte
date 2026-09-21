@@ -71,6 +71,9 @@
 		{#if field.description}
 			<Field.Description class="text-2xs leading-snug">{field.description}</Field.Description>
 		{/if}
+		{#if field.unavailable_reason}
+			<span class="text-2xs leading-snug text-warning">{field.unavailable_reason}</span>
+		{/if}
 	</Field.Content>
 
 	<div class="shrink-0">

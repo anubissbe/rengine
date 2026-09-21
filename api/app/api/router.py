@@ -23,6 +23,7 @@ from app.api.v1 import (
     notes,
     notification_channels,
     notifications,
+    oast,
     onboarding,
     organizations,
     ports,
@@ -84,6 +85,7 @@ router.include_router(ports.router)
 router.include_router(ip_addresses.router)
 router.include_router(endpoints.router)
 router.include_router(vulnerabilities.router)
+router.include_router(oast.router)
 router.include_router(vuln_templates.router)
 router.include_router(threat_intel.router)
 router.include_router(toolbox.router)

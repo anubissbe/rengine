@@ -92,7 +92,9 @@
 				};
 			});
 	});
-	let checks = $derived(Math.max(0, ...coverage.map((c) => c.templates_selected ?? 0)));
+	let checks = $derived(
+		Math.max(0, ...coverage.filter((c) => c.tier).map((c) => c.templates_selected ?? 0))
+	);
 	let targets = $derived(
 		Math.max(0, ...tiers.filter((t) => t.key !== 'replay').map((t) => t.targets))
 	);

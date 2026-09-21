@@ -13,6 +13,12 @@ class FieldTier(StrEnum):
     ADVANCED = "advanced"
 
 
+class FieldNeeds(StrEnum):
+    """Instance configuration a field is inert without."""
+
+    OAST = "oast"
+
+
 ADVANCED: dict[str, str] = {"tier": FieldTier.ADVANCED.value}
 
 

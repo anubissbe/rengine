@@ -98,6 +98,8 @@ class StageField(BaseModel):
     widget: str | None = None
     kind: str | None = None
     launch: bool = False
+    needs: str | None = None
+    unavailable_reason: str | None = None
 
 
 class StageTransport(BaseModel):

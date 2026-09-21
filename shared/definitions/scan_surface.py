@@ -84,6 +84,7 @@ class Tier(StrEnum):
     UNIVERSAL = "universal"
     MATCHED = "matched"
     BLIND = "blind"
+    OAST = "oast"
     DEEP = "deep"
     SERVICES = "services"
     NAMES = "names"
@@ -99,6 +100,7 @@ TIER_ORDER: tuple[str, ...] = (
     Tier.NAMES.value,
     Tier.MATCHED.value,
     Tier.BLIND.value,
+    Tier.OAST.value,
     Tier.DEEP.value,
     Tier.REPLAY.value,
     Tier.DAST.value,
@@ -110,6 +112,7 @@ TIER_LABELS: dict[str, str] = {
     Tier.UNIVERSAL.value: "Universal checks",
     Tier.MATCHED.value: "Checks for detected software",
     Tier.BLIND.value: "Known-exploited sweep",
+    Tier.OAST.value: "Out-of-band checks",
     Tier.DEEP.value: "Remaining checks",
     Tier.SERVICES.value: "TLS and network checks",
     Tier.NAMES.value: "DNS checks",
@@ -123,6 +126,7 @@ TIER_HELP: dict[str, str] = {
     Tier.UNIVERSAL.value: "Checks for any web server. One web asset per origin.",
     Tier.MATCHED.value: "Checks for the software the web asset was seen running.",
     Tier.BLIND.value: "Known-exploited and severe checks on every origin, within a request budget. Runs first.",
+    Tier.OAST.value: "Checks that report through a callback to an external server.",
     Tier.DEEP.value: "Every remaining software-specific check. Runs last and does not count toward an origin's coverage.",
     Tier.SERVICES.value: "Certificate and protocol checks on open ports.",
     Tier.NAMES.value: "Record-level checks on resolved names.",
@@ -137,6 +141,7 @@ ROOT_TIERS: tuple[str, ...] = (
     Tier.UNIVERSAL.value,
     Tier.MATCHED.value,
     Tier.BLIND.value,
+    Tier.OAST.value,
 )
 
 

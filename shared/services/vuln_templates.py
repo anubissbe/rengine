@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.orm import Session
 
+from shared.definitions.oast import needs_callback
 from shared.definitions.vulnerabilities import (
     CUSTOM_ROOT,
     DAST_ROOT,
@@ -91,6 +92,7 @@ class ParsedTemplate:
     requests: int = 0
     paths: list[str] = field(default_factory=list)
     simple: bool = False
+    needs_oast: bool = False
 
 
 def _as_list(value: Any) -> list[str]:
@@ -258,6 +260,7 @@ def parse_template(raw: str) -> ParsedTemplate:
         requests=_request_count(document, info),
         paths=shape[0],
         simple=shape[1],
+        needs_oast=needs_callback(raw, _as_list(info.get("tags"))),
     )
 
 
@@ -302,6 +305,7 @@ def _row(
         "requests": parsed.requests,
         "paths": parsed.paths,
         "simple": parsed.simple,
+        "needs_oast": parsed.needs_oast,
         "digest": hashlib.sha256((raw or path).encode("utf-8", "ignore")).hexdigest(),
         "raw": raw,
         "enabled": True,

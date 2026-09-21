@@ -57,6 +57,7 @@ class VulnTemplate(SQLModel, table=True):
         default=None, sa_column=Column(JSON(none_as_null=True), nullable=True)
     )
     simple: bool | None = Field(default=None)
+    needs_oast: bool = Field(default=False)
     digest: str = Field(default="", max_length=64)
     raw: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     enabled: bool = Field(default=True, index=True)

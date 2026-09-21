@@ -183,7 +183,7 @@ class DalfoxScanner(VulnScanner):
         total = 0
         errors = []
         notes = []
-        if getattr(ctx.cfg, "interactsh", False):
+        if self._oast.enabled:
             notes.append("dalfox does not do out-of-band testing.")
         for start in range(0, len(urls), _PER_INVOCATION):
             if ctx.aborted():

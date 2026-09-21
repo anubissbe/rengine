@@ -33,7 +33,6 @@ _TRANSPORT_NAMES = {
     "dns_timeout",
 }
 _READ_ELSEWHERE = {
-    ("dast_scan", "interactsh"),
     ("url_discovery", "static_extensions"),
     ("url_discovery", "ignored_params"),
     ("url_discovery", "keep_per_family"),

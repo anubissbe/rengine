@@ -68,11 +68,6 @@ class DastScanConfig(StageConfig):
         title="Request budget",
         description="Parameter sets fuzzed in one scan at most.",
     )
-    interactsh: bool = advanced(
-        False,
-        title="Out-of-band testing",
-        description="Detect blind injection through callbacks. The server is set on the vulnerability scan.",
-    )
 
     @field_validator("severities")
     @classmethod

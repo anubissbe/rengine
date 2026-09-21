@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from shared.definitions.intensity import Transport
+from shared.definitions.oast import DEFAULT_WAIT_SECONDS, EVICTION_SLACK
 from shared.enums.api_key import APIProvider
 from shared.models.api_key import API_PROVIDER_META
 from shared.services.scan_resolve import MASK, redact_command
-from stages.vulnerability_scan.scanners.nuclei import (
-    OAST_WAIT_SECONDS,
-    Job,
-    NucleiScanner,
-    _oast_server,
-)
-from tools.nuclei.client import _EVICTION_SLACK, NucleiClient, NucleiOptions
+from tools.nuclei.client import NucleiClient, NucleiOptions
 
 pytestmark = pytest.mark.pipeline
 
@@ -45,7 +38,7 @@ def test_a_request_stays_correlatable_for_longer_than_we_listen():
     eviction = int(_flag(args, "-interactions-eviction"))
 
     assert eviction > cooldown
-    assert eviction == cooldown + _EVICTION_SLACK
+    assert eviction == cooldown + EVICTION_SLACK
 
 
 def test_no_window_leaves_nuclei_on_its_own_defaults():
@@ -53,10 +46,16 @@ def test_no_window_leaves_nuclei_on_its_own_defaults():
     assert "-interactions-cooldown-period" not in args
 
 
-def test_the_default_cooldown_is_short_so_it_does_not_cripple_completion():
-    # nuclei sleeps this at the end of every OAST batch; a long wait crippled a batched scan.
-    # post-batch wait for out-of-band callbacks
-    assert 0 < OAST_WAIT_SECONDS <= 30
+def test_the_wait_is_paid_on_the_out_of_band_batch_alone():
+    assert (
+        _flag(
+            _args(interactsh=True, oast_wait_seconds=0), "-interactions-cooldown-period"
+        )
+        is None
+    )
+    long = _args(interactsh=True, oast_wait_seconds=DEFAULT_WAIT_SECONDS)
+    assert _flag(long, "-interactions-cooldown-period") == str(DEFAULT_WAIT_SECONDS)
+    assert int(_flag(long, "-interactions-eviction")) > DEFAULT_WAIT_SECONDS
 
 
 def test_the_token_reaches_nuclei():
@@ -77,53 +76,6 @@ def test_no_token_is_not_an_empty_token(token):
 def test_a_token_is_never_sent_when_oast_is_off():
     args = _args(interactsh=False, interactsh_token="t0k")
     assert "-interactsh-token" not in args
-
-
-def test_the_token_is_not_even_read_when_oast_is_off():
-    reads: list[str] = []
-    scanner = NucleiScanner.__new__(NucleiScanner)
-    scanner.ctx = SimpleNamespace(
-        cfg=SimpleNamespace(
-            max_minutes=0,
-            headless=False,
-            interactsh=False,
-            interactsh_server="",
-        ),
-        transport=Transport(tool="nuclei", rate=150, threads=25, timeout=10, retries=1),
-        net=SimpleNamespace(proxy_url=None, headers={}),
-        resolved=SimpleNamespace(
-            follow_redirects=None, tool_args=lambda _t: [], excluded_subdomains=[]
-        ),
-        session=None,
-    )
-    scanner._oast_token = lambda _ctx: reads.append("read") or "t0k"
-
-    job = Job(
-        tier="universal", lane="Standard rate", batch=1, items=[], templates=[], rate=10
-    )
-    options = NucleiScanner._options(scanner, job, Path("t.txt"), None)
-
-    assert options.interactsh_token is None
-    assert reads == [], "the key was fetched for a run that will not use it"
-
-
-@pytest.mark.parametrize(
-    ("given", "expected"),
-    [
-        ("oast.example.com", "oast.example.com"),
-        ("https://oast.example.com", "oast.example.com"),
-        ("http://oast.example.com/", "oast.example.com"),
-        ("https://oast.example.com/path/x", "oast.example.com"),
-        ("  oast.example.com.  ", "oast.example.com"),
-    ],
-)
-def test_the_server_is_reduced_to_a_host(given: str, expected: str):
-    assert _oast_server(given) == expected
-
-
-@pytest.mark.parametrize("given", ["", "   ", None, "https://"])
-def test_nothing_configured_means_the_public_server(given):
-    assert _oast_server(given) is None
 
 
 def test_the_token_has_somewhere_to_be_stored():

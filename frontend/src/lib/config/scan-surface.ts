@@ -65,6 +65,7 @@ export enum Tier {
 	UNIVERSAL = 'universal',
 	MATCHED = 'matched',
 	BLIND = 'blind',
+	OAST = 'oast',
 	DEEP = 'deep',
 	SERVICES = 'services',
 	NAMES = 'names',
@@ -80,6 +81,7 @@ export const TIER_ORDER: string[] = [
 	Tier.NAMES,
 	Tier.MATCHED,
 	Tier.BLIND,
+	Tier.OAST,
 	Tier.DEEP,
 	Tier.REPLAY,
 	Tier.DAST,
@@ -91,6 +93,7 @@ export const TIER_LABELS: Record<string, string> = {
 	[Tier.UNIVERSAL]: 'Universal checks',
 	[Tier.MATCHED]: 'Checks for detected software',
 	[Tier.BLIND]: 'Known-exploited sweep',
+	[Tier.OAST]: 'Out-of-band checks',
 	[Tier.DEEP]: 'Remaining checks',
 	[Tier.SERVICES]: 'TLS and network checks',
 	[Tier.NAMES]: 'DNS checks',
@@ -105,6 +108,7 @@ export const TIER_HELP: Record<string, string> = {
 	[Tier.MATCHED]: 'Checks for the software the web asset was seen running.',
 	[Tier.BLIND]:
 		'Known-exploited and severe checks on every origin, within a request budget. Runs first.',
+	[Tier.OAST]: 'Checks that report through a callback to an external server.',
 	[Tier.DEEP]:
 		"Every remaining software-specific check. Runs last and does not count toward an origin's coverage.",
 	[Tier.SERVICES]: 'Certificate and protocol checks on open ports.',
