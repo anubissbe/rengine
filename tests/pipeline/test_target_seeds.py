@@ -191,13 +191,11 @@ async def test_a_seeded_host_carries_its_source_and_its_answer(estate, now):
             "www.example.com": SubdomainSource.IMPORTED.value,
             "dead.example.com": SubdomainSource.IMPORTED.value,
         }
-        stored = stage._persist_hosts(
+        return stage._persist_hosts(
             ["dead.example.com", "www.example.com"],
             {},
             {"www.example.com": {"ips": ["203.0.113.10"], "cname": None}},
         )
-        sync_session.commit()
-        return stored
 
     assert await estate.session.run_sync(write) == 2
 
@@ -235,7 +233,6 @@ async def test_seeding_the_same_host_twice_updates_one_row(estate, now):
         )
         stage._sources = {"www.example.com": SubdomainSource.IMPORTED.value}
         stage._persist_hosts(["www.example.com"], {}, answers)
-        sync_session.commit()
 
     await estate.session.run_sync(lambda s: write(s, {}))
     await estate.session.run_sync(
@@ -330,9 +327,7 @@ async def test_a_seed_write_stays_under_the_bind_parameter_cap(estate, now):
             resolved=_resolved(),
         )
         stage._sources = dict.fromkeys(names, SubdomainSource.IMPORTED.value)
-        stored = stage._persist_hosts(names, {}, {})
-        sync_session.commit()
-        return stored
+        return stage._persist_hosts(names, {}, {})
 
     assert await estate.session.run_sync(write) == 4000
     count = await estate.session.scalar(
@@ -367,7 +362,6 @@ async def test_a_dropped_seed_never_overwrites_a_good_answer(estate, now):
         )
         stage._sources = {"www.example.com": SubdomainSource.IMPORTED.value}
         stage._persist_hosts(["www.example.com"], {}, {})
-        sync_session.commit()
 
     await estate.session.run_sync(write)
 
