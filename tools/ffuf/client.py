@@ -12,6 +12,7 @@ from tools.runner import (
     CLIToolRunner,
     OutputFormat,
     StreamOutcome,
+    ToolFlags,
     ToolNotFoundError,
 )
 
@@ -63,7 +64,13 @@ class FfufClient:
         self.extra_args = extra_args or []
 
         try:
-            self._runner = CLIToolRunner(FFUF_BINARY, default_timeout=DEFAULT_TIMEOUT)
+            self._runner = CLIToolRunner(
+                FFUF_BINARY,
+                default_timeout=DEFAULT_TIMEOUT,
+                recorder=recorder,
+                extra_args=self.extra_args,
+                flags=ToolFlags(silent="-s"),
+            )
         except ToolNotFoundError as e:
             raise FfufError(str(e)) from e
 
@@ -105,13 +112,7 @@ class FfufClient:
 
         with self._runner.stream_json(
             args=args,
-            json_flag="-json",
-            silent=True,
-            silent_flag="-s",
             timeout=budget + _BUDGET_SLACK,
-            recorder=self.recorder,
-            tool=FFUF_BINARY,
-            extra_args=self.extra_args,
         ) as stream:
             yield stream
 
@@ -153,9 +154,6 @@ class FfufClient:
             output_format=OutputFormat.PLAIN,
             silent=False,
             timeout=budget + _BUDGET_SLACK,
-            recorder=self.recorder,
-            tool=FFUF_BINARY,
-            extra_args=self.extra_args,
         )
         return self._parse(result.stdout)
 
