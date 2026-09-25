@@ -8,6 +8,8 @@ from mcp import registry
 from mcp.capabilities import Capability
 from mcp.tools.base import ToolGroup
 
+pytestmark = pytest.mark.mcp
+
 SPECS = sorted(registry.registry().values(), key=lambda spec: spec.name)
 
 
