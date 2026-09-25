@@ -36,6 +36,7 @@ CMD ["/app/entrypoint.sh"]
 
 FROM development AS production
 
+# compose's &api-volumes, as copies; `make check-lists` keeps the two in step
 COPY api/app /app/app
 COPY stages /app/stages
 COPY reports /app/reports

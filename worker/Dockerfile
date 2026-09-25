@@ -110,6 +110,7 @@ CMD ["uv", "run", "celery", "-A", "app.celery", "worker", "--loglevel=INFO"]
 
 FROM development AS production
 
+# compose's &worker-volumes, as copies; `make check-lists` keeps the two in step
 COPY worker/app /app/app
 COPY stages /app/stages
 COPY reports /app/reports
