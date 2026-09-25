@@ -34,7 +34,8 @@ from shared.utils.datetime import utc_now
 TEST_DB = os.environ.get("POSTGRES_TEST_DB", "rengine_test")
 # one run of the suite at a time per database; a second waits rather than dropping it
 _RUN_LOCK = zlib.crc32(TEST_DB.encode()) - 2**31
-REPO_ROOT = Path(__file__).resolve().parent.parent
+TESTS_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = TESTS_ROOT.parent
 ALEMBIC = shutil.which("alembic") or str(Path(sys.executable).parent / "alembic")
 
 
@@ -52,6 +53,30 @@ def _test_url(driver: str = "postgresql+asyncpg") -> str:
         f"{driver}://{s.POSTGRES_USER}:{s.POSTGRES_PASSWORD}"
         f"@{s.POSTGRES_HOST}:{s.POSTGRES_PORT}/{TEST_DB}"
     )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Every test carries the marker its directory is named after.
+
+    A `pytestmark` in a conftest does not reach the modules beside it, so each module
+    sets its own, and a module that forgets is refused here, before `-m` deselects it.
+    """
+    unmarked = sorted(
+        {
+            str(item.path.relative_to(TESTS_ROOT))
+            for item in items
+            if item.path.is_relative_to(TESTS_ROOT)
+            and item.get_closest_marker(item.path.relative_to(TESTS_ROOT).parts[0])
+            is None
+        }
+    )
+    if unmarked:
+        msg = (
+            "These test modules lack the marker of their directory; set "
+            "`pytestmark = pytest.mark.<directory>` in each: " + ", ".join(unmarked)
+        )
+        raise pytest.UsageError(msg)
 
 
 @asynccontextmanager
