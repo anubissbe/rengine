@@ -18,9 +18,10 @@ FROM base AS development
 COPY shared /app/shared
 COPY tools /app/tools
 
-COPY api/pyproject.toml api/uv.lock* ./
+# the lockfile is required: a build resolves exactly what was locked and tested
+COPY api/pyproject.toml api/uv.lock ./
 
-RUN uv sync --no-install-project
+RUN uv sync --locked --no-install-project
 
 EXPOSE 8000
 
