@@ -21,6 +21,10 @@ logger = get_logger(__name__)
 FFUF_BINARY = "ffuf"
 DEFAULT_TIMEOUT = 1800
 
+# ffuf only knows `-s`; the `-silent` other ProjectDiscovery-style tools take is folded into it,
+# so a custom `-silent` is dropped with the flag the runner sets instead of failing the run
+FFUF_ALIASES: dict[str, str] = {"-silent": "-s"}
+
 # ffuf takes -H only
 HEADER_FLAG = "-H"
 
@@ -70,6 +74,7 @@ class FfufClient:
                 recorder=recorder,
                 extra_args=self.extra_args,
                 flags=ToolFlags(silent="-s"),
+                aliases=FFUF_ALIASES,
             )
         except ToolNotFoundError as e:
             raise FfufError(str(e)) from e
