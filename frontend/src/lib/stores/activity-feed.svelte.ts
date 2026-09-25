@@ -19,6 +19,7 @@ import Waypoints from '@lucide/svelte/icons/waypoints';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { IconComponent } from '$lib/config/icons';
 import { STORAGE_KEYS } from '$lib/config/storage-keys';
+import { errorMessage } from '$lib/utilities/errors';
 
 export function getActivityIcon(eventType: string): IconComponent {
 	const s = eventType.toLowerCase();
@@ -299,7 +300,7 @@ function createActivityFeed() {
 				page = p;
 				loadError = null;
 			} catch (e) {
-				loadError = e instanceof Error ? e.message : 'Activity not loaded';
+				loadError = errorMessage(e, 'Activity not loaded');
 			} finally {
 				loading = false;
 				initialLoad = false;

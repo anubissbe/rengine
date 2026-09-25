@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { page as appPage } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import { onDestroy, untrack } from 'svelte';
@@ -685,7 +686,7 @@
 				description: runDescription(run)
 			});
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Rescan not started');
+			toast.error(errorMessage(e, 'Rescan not started'));
 		} finally {
 			rescanBusy = false;
 		}

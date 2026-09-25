@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -67,7 +68,7 @@
 			if (result.success) toast.success(result.message);
 			else toast.error(result.message);
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Test failed');
+			toast.error(errorMessage(e, 'Test failed'));
 		} finally {
 			testing = false;
 		}
@@ -80,7 +81,7 @@
 				await instanceSettingsApi.update({ ai_enabled: false });
 				next();
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'AI settings not saved');
+				toast.error(errorMessage(e, 'AI settings not saved'));
 			} finally {
 				busy = false;
 			}
@@ -103,7 +104,7 @@
 			});
 			next();
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'AI settings not saved');
+			toast.error(errorMessage(e, 'AI settings not saved'));
 		} finally {
 			busy = false;
 		}

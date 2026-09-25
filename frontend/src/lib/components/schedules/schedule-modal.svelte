@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -160,7 +161,7 @@
 			const res = await targetsApi.list({ project_slug: projectSlug, size: 100 });
 			targets = res.items;
 		} catch (e) {
-			targetsError = e instanceof Error ? e.message : 'Targets not loaded';
+			targetsError = errorMessage(e, 'Targets not loaded');
 		} finally {
 			targetsLoading = false;
 		}

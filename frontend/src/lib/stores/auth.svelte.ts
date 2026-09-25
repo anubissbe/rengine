@@ -45,6 +45,7 @@ import { ai } from '$lib/stores/ai.svelte';
 import { mcp } from '$lib/stores/mcp.svelte';
 import { remoteControl } from '$lib/stores/remote-control.svelte';
 import { clearServiceLookup } from '$lib/utilities/service-lookup';
+import { errorMessage } from '$lib/utilities/errors';
 
 interface AuthState {
 	user: User | null;
@@ -90,7 +91,7 @@ function createAuthStore() {
 			toast.success('Signed in');
 			return { success: true };
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Login failed';
+			const message = errorMessage(error, 'Login failed');
 			return { success: false, error: message };
 		}
 	}
@@ -159,7 +160,7 @@ function createAuthStore() {
 			await authApi.register({ email, username, password });
 			return { success: true };
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Registration failed';
+			const message = errorMessage(error, 'Registration failed');
 			return { success: false, error: message };
 		}
 	}

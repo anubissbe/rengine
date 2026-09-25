@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { onMount } from 'svelte';
 	import { notificationChannelsStore } from '$lib/stores/notificationChannels.svelte';
 	import { capabilitiesStore } from '$lib/stores/capabilities.svelte';
@@ -130,7 +131,7 @@
 			if (result.success) toast.success(result.message);
 			else toast.error(result.message);
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Test failed');
+			toast.error(errorMessage(e, 'Test failed'));
 		} finally {
 			testingDraft = false;
 		}

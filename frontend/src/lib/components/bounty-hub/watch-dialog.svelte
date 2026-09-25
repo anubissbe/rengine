@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Badge } from '$lib/components/ui/badge';
@@ -114,7 +115,7 @@
 		try {
 			preview = await watchesApi.preview(program.platform, program.handle, projectId);
 		} catch (error) {
-			previewError = error instanceof Error ? error.message : 'Scope not read';
+			previewError = errorMessage(error, 'Scope not read');
 			preview = null;
 		} finally {
 			loadingPreview = false;
@@ -199,7 +200,7 @@
 			onSaved(watch);
 			onOpenChange(false);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Watch not saved');
+			toast.error(errorMessage(error, 'Watch not saved'));
 		} finally {
 			saving = false;
 		}

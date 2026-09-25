@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -77,7 +78,7 @@
 			await twoFactorApi.loginVerify(mfaToken, code.trim());
 			await auth.checkAuth();
 		} catch (err) {
-			mfaError = err instanceof Error ? err.message : 'Invalid code';
+			mfaError = errorMessage(err, 'Invalid code');
 			code = '';
 			verifying = false;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -97,7 +98,7 @@
 			data.instanceName = instanceName.trim();
 			next();
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Settings not saved');
+			toast.error(errorMessage(e, 'Settings not saved'));
 		} finally {
 			busy = false;
 		}

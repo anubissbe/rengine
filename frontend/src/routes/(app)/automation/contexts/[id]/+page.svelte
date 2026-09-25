@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { page } from '$app/state';
@@ -235,7 +236,7 @@
 				seedKey++;
 			}
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Context not loaded';
+			loadError = errorMessage(e, 'Context not loaded');
 		} finally {
 			isLoading = false;
 		}
@@ -321,7 +322,7 @@
 				toast.error(scanContextsStore.error ?? 'Context not duplicated');
 			}
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Context not duplicated');
+			toast.error(errorMessage(e, 'Context not duplicated'));
 		} finally {
 			isDuplicating = false;
 		}

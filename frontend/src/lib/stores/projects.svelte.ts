@@ -2,6 +2,7 @@ import { projectsApi } from '$lib/api/projects';
 import type { Project } from '$lib/types/project';
 import { STORAGE_KEYS } from '$lib/config/storage-keys';
 import { toast } from 'svelte-sonner';
+import { errorMessage } from '$lib/utilities/errors';
 
 function getStoredActiveProjectSlug(): string | null {
 	if (typeof window === 'undefined') return null;
@@ -59,7 +60,7 @@ function createProjectsStore() {
 					activeProject = projects[0];
 				}
 			} catch (e) {
-				error = e instanceof Error ? e.message : 'Projects not loaded';
+				error = errorMessage(e, 'Projects not loaded');
 			} finally {
 				isLoading = false;
 			}
@@ -90,7 +91,7 @@ function createProjectsStore() {
 				projects = [newProject, ...projects];
 				return newProject;
 			} catch (e) {
-				error = e instanceof Error ? e.message : 'Project not created';
+				error = errorMessage(e, 'Project not created');
 				return null;
 			}
 		},
@@ -111,7 +112,7 @@ function createProjectsStore() {
 				}
 				return true;
 			} catch (e) {
-				error = e instanceof Error ? e.message : 'Project not deleted';
+				error = errorMessage(e, 'Project not deleted');
 				return false;
 			}
 		},

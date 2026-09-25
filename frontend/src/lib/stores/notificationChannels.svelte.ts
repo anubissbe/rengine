@@ -5,6 +5,7 @@ import type {
 	NotificationChannelUpdate
 } from '$lib/types/notification-channel';
 import { toast } from 'svelte-sonner';
+import { errorMessage } from '$lib/utilities/errors';
 
 function createNotificationChannelsStore() {
 	let channels = $state<NotificationChannelRead[]>([]);
@@ -29,7 +30,7 @@ function createNotificationChannelsStore() {
 				channels = await notificationChannelsApi.list();
 				hasFetched = true;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Notification channels not loaded');
+				toast.error(errorMessage(e, 'Notification channels not loaded'));
 			} finally {
 				isLoading = false;
 			}
@@ -41,7 +42,7 @@ function createNotificationChannelsStore() {
 				channels = [...channels, created];
 				return created;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Notification channel not created');
+				toast.error(errorMessage(e, 'Notification channel not created'));
 				return null;
 			}
 		},
@@ -55,7 +56,7 @@ function createNotificationChannelsStore() {
 				channels = channels.map((c) => (c.id === id ? updated : c));
 				return updated;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Notification channel not saved');
+				toast.error(errorMessage(e, 'Notification channel not saved'));
 				return null;
 			}
 		},
@@ -70,7 +71,7 @@ function createNotificationChannelsStore() {
 				channels = channels.filter((c) => c.id !== id);
 				return true;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Notification channel not deleted');
+				toast.error(errorMessage(e, 'Notification channel not deleted'));
 				return false;
 			}
 		},
@@ -90,7 +91,7 @@ function createNotificationChannelsStore() {
 				);
 				return result;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Notification channel test failed');
+				toast.error(errorMessage(e, 'Notification channel test failed'));
 				return null;
 			}
 		},

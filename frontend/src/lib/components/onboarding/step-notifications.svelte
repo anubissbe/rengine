@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -110,7 +111,7 @@
 			if (result.success) toast.success(result.message);
 			else toast.error(result.message);
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Test failed');
+			toast.error(errorMessage(e, 'Test failed'));
 		} finally {
 			d.testing = false;
 		}
@@ -135,7 +136,7 @@
 			}
 			next();
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Notification channels not saved');
+			toast.error(errorMessage(e, 'Notification channels not saved'));
 		} finally {
 			busy = false;
 		}

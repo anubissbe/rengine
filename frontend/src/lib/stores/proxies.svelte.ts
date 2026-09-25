@@ -1,6 +1,7 @@
 import { proxiesApi } from '$lib/api/proxies';
 import type { ProxyRead, ProxyCreate, ProxyUpdate, ProxyTestResult } from '$lib/types/proxy';
 import { toast } from 'svelte-sonner';
+import { errorMessage } from '$lib/utilities/errors';
 
 function createProxiesStore() {
 	let proxies = $state<ProxyRead[]>([]);
@@ -25,7 +26,7 @@ function createProxiesStore() {
 				proxies = await proxiesApi.list();
 				hasFetched = true;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Proxies not loaded');
+				toast.error(errorMessage(e, 'Proxies not loaded'));
 			} finally {
 				isLoading = false;
 			}
@@ -37,7 +38,7 @@ function createProxiesStore() {
 				proxies = [...proxies, created];
 				return created;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Proxy not created');
+				toast.error(errorMessage(e, 'Proxy not created'));
 				return null;
 			}
 		},
@@ -48,7 +49,7 @@ function createProxiesStore() {
 				proxies = proxies.map((p) => (p.id === id ? updated : p));
 				return updated;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Proxy not saved');
+				toast.error(errorMessage(e, 'Proxy not saved'));
 				return null;
 			}
 		},
@@ -63,7 +64,7 @@ function createProxiesStore() {
 				proxies = proxies.filter((p) => p.id !== id);
 				return true;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Proxy not deleted');
+				toast.error(errorMessage(e, 'Proxy not deleted'));
 				return false;
 			}
 		},
@@ -83,7 +84,7 @@ function createProxiesStore() {
 				);
 				return result;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Proxy test failed');
+				toast.error(errorMessage(e, 'Proxy test failed'));
 				return null;
 			}
 		},
@@ -94,7 +95,7 @@ function createProxiesStore() {
 				proxies = proxies.map((p) => ({ ...p, is_default: p.id === id }));
 				return updated;
 			} catch (e) {
-				toast.error(e instanceof Error ? e.message : 'Default proxy not set');
+				toast.error(errorMessage(e, 'Default proxy not set'));
 				return null;
 			}
 		},

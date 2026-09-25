@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { page as appPage } from '$app/state';
 	import { replaceState } from '$app/navigation';
@@ -782,7 +783,7 @@
 				`${res.queued.toLocaleString()} ${res.queued === 1 ? 'request' : 'requests'} sent to ${proxyName(connectorId)}.`
 			);
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Requests not sent.');
+			toast.error(errorMessage(e, 'Requests not sent.'));
 		}
 	}
 	async function sendEndpoint(e: Endpoint, connectorId: string) {
@@ -792,7 +793,7 @@
 			});
 			toast.success(`Sent to ${proxyName(connectorId)}.`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Request not sent.');
+			toast.error(errorMessage(err, 'Request not sent.'));
 		}
 	}
 	let branchScope = $derived({ projectId, scanId, filter: treeFilter, merged: isMerged });

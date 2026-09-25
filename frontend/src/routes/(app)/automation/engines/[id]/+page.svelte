@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -296,7 +297,7 @@
 			}
 		} catch (e) {
 			if (token === previewToken) {
-				previewError = e instanceof Error ? e.message : 'Preview unavailable';
+				previewError = errorMessage(e, 'Preview unavailable');
 			}
 		} finally {
 			if (token === previewToken) previewLoading = false;
@@ -313,7 +314,7 @@
 				yamlSource = fresh.yaml_source ?? engineToYaml(fresh, engineCatalogStore.catalog);
 			}
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Engine not loaded';
+			loadError = errorMessage(e, 'Engine not loaded');
 		} finally {
 			isLoading = false;
 		}

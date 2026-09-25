@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utilities/errors';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Badge } from '$lib/components/ui/badge';
@@ -90,7 +91,7 @@
 			const started = await toolbox.run(name, payload(name), projectId);
 			shown = { ...shown, [name]: started.id };
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Run not started');
+			toast.error(errorMessage(e, 'Run not started'));
 		}
 	}
 
