@@ -18,6 +18,7 @@ from shared.definitions.oast import (
     off_reason,
 )
 from shared.definitions.scan_surface import BATCH_SECONDS, ROOT_TIERS, Tier
+from shared.models.instance_settings import InstanceSettings, oast_reason
 from shared.services.scan_surface import split, wants_callback
 from stages.vulnerability_scan.scanners.base import Coverage
 from stages.vulnerability_scan.scanners.nuclei import NucleiScanner
@@ -230,3 +231,21 @@ def test_a_real_failure_on_a_tier_row_is_never_overwritten():
     row.error = "Stopped at the time budget. Remaining checks did not run."
     scanner._note_callbacks([row])
     assert row.error.startswith("Stopped at the time budget")
+
+
+def test_the_instance_row_says_why_out_of_band_is_off():
+    assert oast_reason(None) == off_reason(
+        OastMode.OFF.value, server=None, acknowledged=False
+    )
+    unset = InstanceSettings(
+        oast_mode=OastMode.SELF_HOSTED.value, oast_server="not a host"
+    )
+    assert unset.oast_host is None
+    assert oast_reason(unset) == "No self-hosted server is set."
+    hosted = InstanceSettings(
+        oast_mode=OastMode.SELF_HOSTED.value, oast_server="https://OAST.Example.com/"
+    )
+    assert hosted.oast_host == "oast.example.com"
+    assert oast_reason(hosted) is None
+    public = InstanceSettings(oast_mode=OastMode.PUBLIC.value)
+    assert public.oast_off_reason == "The public server has not been accepted."
