@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { flipSort, pageParam, parsePageIndex, parseSort, sortParam, type SortKey } from './sort';
+import {
+	flipSort,
+	pageParam,
+	parsePageIndex,
+	parseSort,
+	readParam,
+	sortParam,
+	type SortKey
+} from './sort';
 
 const DEFAULT: SortKey = { key: 'risk', dir: -1 };
 
@@ -47,5 +55,13 @@ describe('page params', () => {
 	it('writes no param on the first page', () => {
 		expect(pageParam(0)).toBeNull();
 		expect(pageParam(2)).toBe('3');
+	});
+});
+
+describe('readParam', () => {
+	it('prefers the current spelling and falls back to older ones', () => {
+		expect(readParam(new URLSearchParams('wa_sort=a&sort=b'), 'wa_sort', 'sort')).toBe('a');
+		expect(readParam(new URLSearchParams('sort=b'), 'wa_sort', 'sort')).toBe('b');
+		expect(readParam(new URLSearchParams(''), 'wa_sort', 'sort')).toBeNull();
 	});
 });

@@ -39,7 +39,14 @@
 	import { RowSelection } from './table/selection.svelte';
 	import GroupList from './table/group-list.svelte';
 	import { GroupedView, LatestLoad, ResultsTable } from './table/results-state.svelte';
-	import { pageParam, parsePageIndex, parseSort, sortParam, type SortKey } from './table/sort';
+	import {
+		pageParam,
+		parsePageIndex,
+		parseSort,
+		readParam,
+		sortParam,
+		type SortKey
+	} from './table/sort';
 	import WebAssetDetailSheet from './web-asset-detail-sheet.svelte';
 	import HostStructureDialog from './web-assets/host-structure-dialog.svelte';
 	import {
@@ -124,16 +131,18 @@
 	let pendingAsset = initial.get('asset');
 
 	let visiblePref = $state<string[] | null>(readPref(STORAGE_KEYS.webAssetsColumns, null));
-	let view = $state<string>(initial.get('view') === 'gallery' ? 'gallery' : 'table');
+	let view = $state<string>(
+		readParam(initial, 'wa_view', 'view') === 'gallery' ? 'gallery' : 'table'
+	);
 	const table = new ResultsTable<SubdomainRead, SubdomainFacetSet>({
 		facets: EMPTY_FACETS,
-		sort: parseSort(initial.get('sort'), DEFAULT_SORT),
-		pageIndex: parsePageIndex(initial.get('page')),
+		sort: parseSort(readParam(initial, 'wa_sort', 'sort'), DEFAULT_SORT),
+		pageIndex: parsePageIndex(readParam(initial, 'wa_page', 'page')),
 		pageSizeKey: STORAGE_KEYS.webAssetsPageSize,
 		densityKey: STORAGE_KEYS.webAssetsDensity
 	});
 	const groups = new GroupedView(
-		initial.get('group') ?? '',
+		readParam(initial, 'wa_group', 'group') ?? '',
 		(by) => subdomainsApi.groups(projectId, scanId, by, leadFilterWithQuery),
 		() => ready
 	);
@@ -422,10 +431,12 @@
 			const sp = new SvelteURLSearchParams(location.search);
 			const set = (k: string, v: string | null) => (v ? sp.set(k, v) : sp.delete(k));
 			set('q', query.search || null);
-			set('view', view === 'gallery' ? 'gallery' : null);
-			set('group', groups.by || null);
-			set('page', pageParam(table.pageIndex));
-			set('sort', sortParam(table.sort, DEFAULT_SORT));
+			set('wa_view', view === 'gallery' ? 'gallery' : null);
+			set('wa_group', groups.by || null);
+			set('wa_page', pageParam(table.pageIndex));
+			set('wa_sort', sortParam(table.sort, DEFAULT_SORT));
+			// links shared before the wa_ prefix carried these bare; the prefixed spelling replaces them
+			for (const legacy of ['view', 'group', 'page', 'sort']) sp.delete(legacy);
 			set('asset', drawerOpen && selected ? selected.name : null);
 			const qs = sp.toString();
 			replaceState(qs ? `?${qs}` : location.pathname, appPage.state);

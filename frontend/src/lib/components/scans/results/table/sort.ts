@@ -31,3 +31,16 @@ export function parsePageIndex(raw: string | null | undefined): number {
 export function pageParam(pageIndex: number): string | null {
 	return pageIndex > 0 ? String(pageIndex + 1) : null;
 }
+
+/** Reads a URL param, falling back to older spellings so links shared before a rename keep working. */
+export function readParam(
+	params: URLSearchParams,
+	key: string,
+	...legacy: string[]
+): string | null {
+	for (const name of [key, ...legacy]) {
+		const value = params.get(name);
+		if (value !== null) return value;
+	}
+	return null;
+}
