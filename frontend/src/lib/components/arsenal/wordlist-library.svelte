@@ -170,7 +170,7 @@
 					<EmptyState
 						icon={Upload}
 						title="No wordlists"
-						description="Upload a text file with one word per line."
+						description="A wordlist is a text file with one word per line."
 					/>
 				</div>
 			{:else}
