@@ -25,10 +25,17 @@ function forward(req, res) {
 			res.writeHead(reply.statusCode ?? 502, reply.headers);
 			if (reply.headers['content-type']?.includes('text/event-stream')) res.flushHeaders();
 			reply.pipe(res);
+			// an api that drops mid-response (a restart during an event stream) never ends the pipe;
+			// cutting the client connection lets the browser see the break and reconnect
+			reply.on('close', () => {
+				if (!reply.complete) res.destroy();
+			});
 		}
 	);
 	upstream.on('error', () => {
-		if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
+		// once the reply has started, a 502 body would corrupt it; the connection is cut instead
+		if (res.headersSent) return res.destroy();
+		res.writeHead(502, { 'content-type': 'text/plain' });
 		res.end('The api is unreachable.');
 	});
 	// a browser that leaves mid-response (an event stream, say) ends the upstream request with it
