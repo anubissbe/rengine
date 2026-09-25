@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import csv
 import io
@@ -1089,7 +1091,7 @@ class TargetService:
         tags: list[Tag],
         existing_target_values: set[str],
         seen_in_batch: set[str],
-    ) -> "BulkTargetResult":
+    ) -> BulkTargetResult:
         _target_value = normalize_target_value(target_value)
         rejected = _rejected(_target_value, seen_in_batch, existing_target_values)
         if rejected is not None:
@@ -1129,7 +1131,7 @@ class TargetService:
         seen_in_batch: set[str],
         shared_organizations: list[Organization] | None = None,
         shared_tags: list[Tag] | None = None,
-    ) -> "BulkTargetResult":
+    ) -> BulkTargetResult:
         target_value = normalize_target_value(item.target_value)
         rejected = _rejected(target_value, seen_in_batch, existing_target_values)
         if rejected is not None:
