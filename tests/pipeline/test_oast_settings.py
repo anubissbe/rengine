@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +20,7 @@ from shared.definitions.oast import (
 )
 from shared.definitions.scan_surface import BATCH_SECONDS, ROOT_TIERS, Tier
 from shared.models.instance_settings import InstanceSettings, oast_reason
+from shared.services import oast as oast_settings
 from shared.services.scan_surface import split, wants_callback
 from stages.vulnerability_scan.scanners.base import Coverage
 from stages.vulnerability_scan.scanners.nuclei import NucleiScanner
@@ -149,10 +151,10 @@ def test_an_out_of_band_batch_sweeps_for_longer_so_the_wait_is_paid_less():
 
 
 def _scanner(oast: OastConfig, *, wanted: bool = True) -> NucleiScanner:
-    scanner = NucleiScanner.__new__(NucleiScanner)
-    scanner._oast = oast
-    scanner.ctx = SimpleNamespace(cfg=SimpleNamespace(interactsh=wanted))
-    return scanner
+    """A scanner built by its constructor, reading `oast` as the instance setting."""
+    ctx = SimpleNamespace(session=None, cfg=SimpleNamespace(interactsh=wanted))
+    with patch.object(oast_settings, "config", return_value=oast):
+        return NucleiScanner(ctx)
 
 
 def test_the_tier_states_where_its_callbacks_go():
