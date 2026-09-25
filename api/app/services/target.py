@@ -14,6 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
+from app.services.project import (
+    project_id_for_slug,
+    project_not_found,
+    require_project_id,
+)
 from app.services.target_filters import (
     SignalName,
     SortDir,
@@ -170,13 +175,11 @@ class TargetService:
         return validate_target(target_value)
 
     async def get_target_counts(self, project_slug: str) -> dict[str, int]:
-        project = await self._get_project_by_slug(project_slug)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+        project_id = await require_project_id(self.session, project_slug)
 
         result = await self.session.execute(
             select(Target.target_type, func.count(Target.id))
-            .where(Target.project_id == project.id)
+            .where(Target.project_id == project_id)
             .group_by(Target.target_type)
         )
 
@@ -196,10 +199,10 @@ class TargetService:
         query = select(Target).where(Target.target_value.ilike(f"%{target_value}%"))
 
         if project_slug:
-            project = await self._get_project_by_slug(project_slug)
-            if not project:
+            project_id = await project_id_for_slug(self.session, project_slug)
+            if project_id is None:
                 return query.where(col(Target.id).is_(None))
-            query = query.where(Target.project_id == project.id)
+            query = query.where(Target.project_id == project_id)
 
         return query
 
@@ -224,10 +227,10 @@ class TargetService:
         query = with_whois_join(select(Target))
 
         if project_slug:
-            project = await self._get_project_by_slug(project_slug)
-            if not project:
+            project_id = await project_id_for_slug(self.session, project_slug)
+            if project_id is None:
                 return query.where(col(Target.id).is_(None))
-            query = query.where(Target.project_id == project.id)
+            query = query.where(Target.project_id == project_id)
 
         query = apply_filters(
             query,
@@ -257,13 +260,13 @@ class TargetService:
             "enriched": 0,
         }
 
-        project = await self._get_project_by_slug(project_slug)
-        if not project:
+        project_id = await project_id_for_slug(self.session, project_slug)
+        if project_id is None:
             return empty
 
         query = with_whois_join(
             select(*signal_count_columns()).select_from(Target)
-        ).where(Target.project_id == project.id)
+        ).where(Target.project_id == project_id)
         query = apply_filters(
             query,
             search=search,
@@ -294,11 +297,11 @@ class TargetService:
         signal: SignalName | None = None,
         limit: int = 10000,
     ) -> list[UUID]:
-        project = await self._get_project_by_slug(project_slug)
-        if not project:
+        project_id = await project_id_for_slug(self.session, project_slug)
+        if project_id is None:
             return []
         query = with_whois_join(select(Target.id)).where(
-            Target.project_id == project.id
+            Target.project_id == project_id
         )
         query = apply_filters(
             query,
@@ -415,25 +418,20 @@ class TargetService:
                 detail=unrecognised_target(target_in.target_value),
             )
 
-        project = await self._get_project_by_slug(target_in.project_slug)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found",
-            )
+        project_id = await require_project_id(self.session, target_in.project_slug)
 
-        await self._check_duplicate_target(target_value, project.id)
+        await self._check_duplicate_target(target_value, project_id)
 
         organizations = await self._get_or_create_organizations(
-            target_in.organization_names, project.id, user_id
+            target_in.organization_names, project_id, user_id
         )
-        tags = await self._get_or_create_tags(target_in.tag_names, project.id, user_id)
+        tags = await self._get_or_create_tags(target_in.tag_names, project_id, user_id)
 
         target = Target(
             target_value=target_value,
             target_type=target_type,
             display_name=target_in.display_name or target_value,
-            project_id=project.id,
+            project_id=project_id,
             created_by=user_id,
             organizations=organizations,
             tags=tags,
@@ -483,9 +481,7 @@ class TargetService:
         if not wanted:
             return []
         if await self.session.get(Project, project_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
+            raise project_not_found()
 
         rows = await self.session.execute(
             select(Target).where(
@@ -543,22 +539,17 @@ class TargetService:
     async def bulk_create_targets(
         self, bulk_in: TargetBulkCreate, user_id: str
     ) -> TargetBulkCreateResponse:
-        project = await self._get_project_by_slug(bulk_in.project_slug)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found",
-            )
+        project_id = await require_project_id(self.session, bulk_in.project_slug)
 
         existing_targets_result = await self.session.execute(
-            select(Target.target_value).where(Target.project_id == project.id)
+            select(Target.target_value).where(Target.project_id == project_id)
         )
         existing_target_values = set(existing_targets_result.scalars().all())
 
         organizations = await self._get_or_create_organizations(
-            bulk_in.organization_names, project.id, user_id
+            bulk_in.organization_names, project_id, user_id
         )
-        tags = await self._get_or_create_tags(bulk_in.tag_names, project.id, user_id)
+        tags = await self._get_or_create_tags(bulk_in.tag_names, project_id, user_id)
 
         results: list[TargetImportResult] = []
         imported_count = 0
@@ -570,7 +561,7 @@ class TargetService:
         for target_value in bulk_in.targets:
             result = await self._process_bulk_target(
                 target_value=target_value,
-                project_id=project.id,
+                project_id=project_id,
                 user_id=user_id,
                 organizations=organizations,
                 tags=tags,
@@ -599,7 +590,7 @@ class TargetService:
             level=ActivityLevel.SUCCESS
             if imported_count > 0
             else ActivityLevel.WARNING,
-            project_id=project.id,
+            project_id=project_id,
             user_id=user_id,
         )
         await self.session.commit()
@@ -855,15 +846,10 @@ class TargetService:
     async def import_targets_structured(
         self, import_request: TargetImportRequest, user_id: str
     ) -> TargetBulkCreateResponse:
-        project = await self._get_project_by_slug(import_request.project_slug)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found",
-            )
+        project_id = await require_project_id(self.session, import_request.project_slug)
 
         existing_targets_result = await self.session.execute(
-            select(Target.target_value).where(Target.project_id == project.id)
+            select(Target.target_value).where(Target.project_id == project_id)
         )
         existing_target_values = set(existing_targets_result.scalars().all())
 
@@ -875,16 +861,16 @@ class TargetService:
         created_targets: list[Target] = []
 
         shared_organizations = await self._get_or_create_organizations(
-            import_request.organization_names, project.id, user_id
+            import_request.organization_names, project_id, user_id
         )
         shared_tags = await self._get_or_create_tags(
-            import_request.tag_names, project.id, user_id
+            import_request.tag_names, project_id, user_id
         )
 
         for item in import_request.targets:
             result = await self._process_import_item(
                 item=item,
-                project_id=project.id,
+                project_id=project_id,
                 user_id=user_id,
                 existing_target_values=existing_target_values,
                 seen_in_batch=seen_in_batch,
@@ -922,7 +908,7 @@ class TargetService:
             level=ActivityLevel.SUCCESS
             if imported_count > 0
             else ActivityLevel.WARNING,
-            project_id=project.id,
+            project_id=project_id,
             user_id=user_id,
         )
         await self.session.commit()
@@ -1117,10 +1103,6 @@ class TargetService:
                 detail="Target not found",
             )
         return target
-
-    async def _get_project_by_slug(self, slug: str) -> Project | None:
-        result = await self.session.execute(select(Project).where(Project.slug == slug))
-        return result.scalar_one_or_none()
 
     async def _get_organization_by_slug(self, slug: str) -> Organization | None:
         result = await self.session.execute(
