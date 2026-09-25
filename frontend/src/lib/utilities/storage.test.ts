@@ -59,6 +59,15 @@ describe('storage', () => {
 		expect(local.getItem('activeProjectSlug')).toBeNull();
 	});
 
+	it('still answers a legacy value when storage is too full to move it', () => {
+		local.setItem('activeProjectSlug', 'acme');
+		local.setItem = () => {
+			throw new Error('QuotaExceededError');
+		};
+		expect(readRaw(STORAGE_KEYS.activeProjectSlug)).toBe('acme');
+		expect(local.getItem('activeProjectSlug')).toBe('acme');
+	});
+
 	it('reads legacy saved target views as JSON', () => {
 		local.setItem('targets:views', JSON.stringify([{ name: 'a', query: 'b' }]));
 		expect(readPref(STORAGE_KEYS.targetViews, [])).toEqual([{ name: 'a', query: 'b' }]);

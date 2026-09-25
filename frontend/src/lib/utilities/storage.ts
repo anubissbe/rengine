@@ -34,8 +34,12 @@ export function readRaw(key: string, which: StorageArea = 'local'): string | nul
 		if (!legacy) return null;
 		const old = store.getItem(legacy);
 		if (old === null) return null;
-		store.setItem(key, old);
-		store.removeItem(legacy);
+		try {
+			store.setItem(key, old);
+			store.removeItem(legacy);
+		} catch {
+			// storage full or read-only: the old key stays, and is read again next time
+		}
 		return old;
 	} catch {
 		return null;

@@ -107,6 +107,8 @@ export class LatestLoad<S> {
 
 	async load(fetch: () => Promise<S>): Promise<void> {
 		this.loading = true;
+		// a retry shows as loading, not as the last attempt's failure
+		this.failed = false;
 		await this.#req.run(fetch, {
 			done: (res) => {
 				this.value = res;

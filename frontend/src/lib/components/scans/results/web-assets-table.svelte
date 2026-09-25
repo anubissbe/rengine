@@ -218,7 +218,7 @@
 		if (visiblePref) writePref(STORAGE_KEYS.webAssetsColumns, visiblePref);
 	});
 
-	const initialSearch = initial.get('q');
+	const initialSearch = readParam(initial, 'wa_q', 'q');
 	if (initialSearch) query = { ...query, search: initialSearch };
 
 	let timer: ReturnType<typeof setTimeout> | null = null;
@@ -430,13 +430,13 @@
 		try {
 			const sp = new SvelteURLSearchParams(location.search);
 			const set = (k: string, v: string | null) => (v ? sp.set(k, v) : sp.delete(k));
-			set('q', query.search || null);
+			set('wa_q', query.search || null);
 			set('wa_view', view === 'gallery' ? 'gallery' : null);
 			set('wa_group', groups.by || null);
 			set('wa_page', pageParam(table.pageIndex));
 			set('wa_sort', sortParam(table.sort, DEFAULT_SORT));
 			// links shared before the wa_ prefix carried these bare; the prefixed spelling replaces them
-			for (const legacy of ['view', 'group', 'page', 'sort']) sp.delete(legacy);
+			for (const legacy of ['q', 'view', 'group', 'page', 'sort']) sp.delete(legacy);
 			set('asset', drawerOpen && selected ? selected.name : null);
 			const qs = sp.toString();
 			replaceState(qs ? `?${qs}` : location.pathname, appPage.state);

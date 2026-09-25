@@ -46,6 +46,18 @@ describe('LatestLoad', () => {
 		await slot.load(() => Promise.resolve('back'));
 		expect(slot.failed).toBe(false);
 	});
+
+	it('shows a retry after a failure as loading, not failed', async () => {
+		const slot = new LatestLoad<string>();
+		await slot.load(() => Promise.reject(new Error('down')));
+		const retry = deferred<string>();
+		const pending = slot.load(() => retry.promise);
+		expect(slot.loading).toBe(true);
+		expect(slot.failed).toBe(false);
+		retry.resolve('back');
+		await pending;
+		expect(slot.value).toBe('back');
+	});
 });
 
 describe('GroupedView', () => {
