@@ -25,7 +25,8 @@
 	import QueryBar from './query-bar/query-bar.svelte';
 	import FilterBar from './web-assets/filter-bar.svelte';
 	import ListHeader from './table/list-header.svelte';
-	import { readPref, rowPadding, selectAllState, withTarget, writePref } from './table/columns';
+	import { rowPadding, selectAllState, withTarget } from './table/columns';
+	import { readPref, writePref } from '$lib/utilities/storage';
 	import AssetRow from './web-assets/asset-row.svelte';
 	import AssetGallery from './web-assets/asset-gallery.svelte';
 	import RenderGallery from './web-assets/render-gallery.svelte';

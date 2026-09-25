@@ -32,7 +32,8 @@
 	import QueryBar from './query-bar/query-bar.svelte';
 	import GroupList from './table/group-list.svelte';
 	import ListHeader from './table/list-header.svelte';
-	import { readPref, rowPadding, selectAllState, withTarget, writePref } from './table/columns';
+	import { rowPadding, selectAllState, withTarget } from './table/columns';
+	import { readPref, writePref } from '$lib/utilities/storage';
 	import ResultsPagination from './table/results-pagination.svelte';
 	import CoverageStrip from './vulnerabilities/coverage-strip.svelte';
 	import FilterBar from './vulnerabilities/filter-bar.svelte';

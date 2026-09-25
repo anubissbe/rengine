@@ -18,7 +18,8 @@
 	import ResultsPagination from './table/results-pagination.svelte';
 	import ViewControls from './table/view-controls.svelte';
 	import GroupList from './table/group-list.svelte';
-	import { readPref, selectAllState, writePref } from './table/columns';
+	import { selectAllState } from './table/columns';
+	import { readPref, writePref } from '$lib/utilities/storage';
 	import RowSelectionBar from './table/row-selection-bar.svelte';
 	import { RowSelection } from './table/selection.svelte';
 	import SecretListHeader from './secrets/secret-list-header.svelte';

@@ -23,7 +23,8 @@
 	import CountTabs from '$lib/components/count-tabs.svelte';
 
 	import QueryBar from './query-bar/query-bar.svelte';
-	import { readPref, rowPadding, selectAllState, writePref } from './table/columns';
+	import { rowPadding, selectAllState } from './table/columns';
+	import { readPref, writePref } from '$lib/utilities/storage';
 	import ListHeader from './table/list-header.svelte';
 	import ResultsPagination from './table/results-pagination.svelte';
 	import GroupList from './table/group-list.svelte';

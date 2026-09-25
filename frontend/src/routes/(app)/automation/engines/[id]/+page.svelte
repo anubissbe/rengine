@@ -48,6 +48,7 @@
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import { ROUTES, routeLabels } from '$lib/config/routes';
 	import { STORAGE_KEYS } from '$lib/config/storage-keys';
+	import { readRaw, writeRaw } from '$lib/utilities/storage';
 	import type { IconComponent } from '$lib/config/icons';
 	import { downloadBlob } from '$lib/utilities/download';
 	import { writeClipboard } from '$lib/utilities/clipboard';
@@ -425,17 +426,17 @@
 
 	function toggleSidePane() {
 		showSidePane = !showSidePane;
-		localStorage.setItem(STORAGE_KEYS.engineSidePane, String(showSidePane));
+		writeRaw(STORAGE_KEYS.engineSidePane, String(showSidePane));
 	}
 
 	function setSideTab(value: string) {
 		sideTab = value as SideTab;
-		localStorage.setItem(STORAGE_KEYS.engineSideTab, sideTab);
+		writeRaw(STORAGE_KEYS.engineSideTab, sideTab);
 	}
 
 	function setLensTargetType(value: string) {
 		lensTargetType = value;
-		localStorage.setItem(STORAGE_KEYS.engineLensTargetType, value);
+		writeRaw(STORAGE_KEYS.engineLensTargetType, value);
 	}
 
 	beforeNavigate((nav) => {
@@ -453,11 +454,11 @@
 	});
 
 	onMount(() => {
-		const storedLens = localStorage.getItem(STORAGE_KEYS.engineLensTargetType);
+		const storedLens = readRaw(STORAGE_KEYS.engineLensTargetType);
 		if (storedLens) lensTargetType = storedLens;
-		const storedPane = localStorage.getItem(STORAGE_KEYS.engineSidePane);
+		const storedPane = readRaw(STORAGE_KEYS.engineSidePane);
 		if (storedPane !== null) showSidePane = storedPane === 'true';
-		const storedTab = localStorage.getItem(STORAGE_KEYS.engineSideTab);
+		const storedTab = readRaw(STORAGE_KEYS.engineSideTab);
 		if (storedTab && SIDE_TABS.some((t) => t.key === storedTab)) sideTab = storedTab as SideTab;
 
 		const onKey = (e: KeyboardEvent) => {

@@ -21,7 +21,8 @@
 
 	import QueryBar from './query-bar/query-bar.svelte';
 	import ListHeader from './table/list-header.svelte';
-	import { readPref, rowPadding, selectAllState, withTarget, writePref } from './table/columns';
+	import { rowPadding, selectAllState, withTarget } from './table/columns';
+	import { readPref, writePref } from '$lib/utilities/storage';
 	import ResultsPagination from './table/results-pagination.svelte';
 	import SelectionBar from './table/selection-bar.svelte';
 	import RowSelectionBar from './table/row-selection-bar.svelte';
