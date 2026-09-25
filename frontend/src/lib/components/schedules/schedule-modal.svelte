@@ -21,7 +21,7 @@
 	import { scanContextsStore } from '$lib/stores/scan-contexts.svelte';
 	import { NO_CONTEXT_LABEL } from '$lib/types/scan-context';
 	import { scanSchedulesStore } from '$lib/stores/scan-schedules.svelte';
-	import { instanceSettingsStore } from '$lib/stores/instanceSettings.svelte';
+	import { instanceSettingsStore } from '$lib/stores/instance-settings.svelte';
 	import { projectsStore } from '$lib/stores/projects.svelte';
 	import { targetsApi } from '$lib/api/targets';
 	import {

@@ -13,7 +13,7 @@
 	import FlaskConicalIcon from '@lucide/svelte/icons/flask-conical';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import InfoIcon from '@lucide/svelte/icons/info';
-	import { notificationChannelsApi } from '$lib/api/notificationChannels';
+	import { notificationChannelsApi } from '$lib/api/notification-channels';
 	import {
 		NOTIF_CATEGORIES,
 		NOTIF_SEVERITIES,

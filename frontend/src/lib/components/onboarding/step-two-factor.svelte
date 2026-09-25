@@ -15,7 +15,7 @@
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-	import { twoFactorApi } from '$lib/api/twoFactor';
+	import { twoFactorApi } from '$lib/api/two-factor';
 	import OtpInput from './otp-input.svelte';
 	import type { StepProps } from '$lib/types/onboarding';
 

@@ -1,5 +1,6 @@
-import { instanceSettingsApi } from '$lib/api/instanceSettings';
+import { instanceSettingsApi } from '$lib/api/instance-settings';
 import type { InstanceSettings, InstanceSettingsUpdate } from '$lib/types/instance-settings';
+import type { ActionResult } from '$lib/types/action-result';
 import { toast } from 'svelte-sonner';
 import { errorMessage } from '$lib/utilities/errors';
 
@@ -46,7 +47,7 @@ function createInstanceSettingsStore() {
 			provider: string;
 			model?: string;
 			api_key?: string;
-		}): Promise<{ success: boolean; message: string } | null> {
+		}): Promise<ActionResult | null> {
 			try {
 				return await instanceSettingsApi.testAi(data);
 			} catch (e) {

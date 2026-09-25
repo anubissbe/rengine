@@ -12,7 +12,7 @@
 	import { goto } from '$app/navigation';
 	import { ROUTES } from '$lib/config/routes';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { twoFactorApi } from '$lib/api/twoFactor';
+	import { twoFactorApi } from '$lib/api/two-factor';
 
 	import { cn } from '$lib/utils.js';
 	import type { HTMLAttributes } from 'svelte/elements';

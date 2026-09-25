@@ -4,7 +4,7 @@
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth.svelte';
 	import UnsavedChangesDialog from '$lib/components/unsaved-changes-dialog.svelte';
-	import { twoFactorApi } from '$lib/api/twoFactor';
+	import { twoFactorApi } from '$lib/api/two-factor';
 	import OtpInput from '$lib/components/onboarding/otp-input.svelte';
 	import CopyButton from '$lib/components/copy-button.svelte';
 	import LoadingButton from '$lib/components/loading-button.svelte';

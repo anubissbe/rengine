@@ -115,7 +115,7 @@
 
 	const proxyName = $derived(
 		draft?.proxy_id
-			? (proxiesStore.proxies.find((p) => p.id === draft?.proxy_id)?.name ?? null)
+			? (proxiesStore.items.find((p) => p.id === draft?.proxy_id)?.name ?? null)
 			: null
 	);
 

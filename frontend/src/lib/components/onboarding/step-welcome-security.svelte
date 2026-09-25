@@ -10,7 +10,7 @@
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import { instanceSettingsApi } from '$lib/api/instanceSettings';
+	import { instanceSettingsApi } from '$lib/api/instance-settings';
 	import { authApi } from '$lib/api/auth';
 	import type { StepProps } from '$lib/types/onboarding';
 

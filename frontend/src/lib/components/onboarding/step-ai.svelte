@@ -14,7 +14,7 @@
 	import FlaskConicalIcon from '@lucide/svelte/icons/flask-conical';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
-	import { instanceSettingsApi } from '$lib/api/instanceSettings';
+	import { instanceSettingsApi } from '$lib/api/instance-settings';
 	import {
 		AI_PROVIDERS as PROVIDERS,
 		AI_FEATURES as FEATURES,

@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utilities/errors';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
-	import { instanceSettingsApi } from '$lib/api/instanceSettings';
+	import { instanceSettingsApi } from '$lib/api/instance-settings';
 	import { capabilitiesStore } from '$lib/stores/capabilities.svelte';
 	import { InstanceMode, coerceInstanceMode } from '$lib/config/capabilities';
 	import { toast } from 'svelte-sonner';

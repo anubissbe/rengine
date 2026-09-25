@@ -25,7 +25,7 @@
 	import { notificationProviderMeta as metaFor } from '$lib/config/notification-providers';
 	import { ROUTES } from '$lib/config/routes';
 	import { SELECT_NONE } from '$lib/constants';
-	import { notificationChannelsStore } from '$lib/stores/notificationChannels.svelte';
+	import { notificationChannelsStore } from '$lib/stores/notification-channels.svelte';
 	import { scanEnginesStore } from '$lib/stores/scan-engines.svelte';
 	import type { BountyProgram } from '$lib/types/bounty-program';
 	import type { NotifProvider } from '$lib/types/notification-channel';
@@ -71,7 +71,7 @@
 			? 'No baseline'
 			: (scanEnginesStore.engines.find((e) => e.id === engineId)?.name ?? 'Select engine')
 	);
-	const channels = $derived(notificationChannelsStore.channels.filter((c) => c.is_active));
+	const channels = $derived(notificationChannelsStore.items.filter((c) => c.is_active));
 	const rateValue = $derived.by(() => {
 		if (String(rateLimit).trim() === '') return null;
 		const n = Number(rateLimit);
