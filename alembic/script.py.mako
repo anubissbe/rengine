@@ -7,11 +7,14 @@ Create Date: ${create_date}
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
+import sqlalchemy as sa  # noqa: F401 - most migrations use it; unused in an empty revision
 import sqlmodel  # noqa: F401 - autogenerate renders sqlmodel column types
 
 from alembic import op
-${imports if imports else ""}
+% if imports:
+${imports}
+% endif
+
 revision: str = ${repr(up_revision).replace("'", '"')}
 down_revision: str | None = ${repr(down_revision).replace("'", '"')}
 branch_labels: str | Sequence[str] | None = ${repr(branch_labels).replace("'", '"')}
