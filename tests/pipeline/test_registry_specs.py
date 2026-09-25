@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
+import stages.vulnerability_scan.scanners as scanners_package
 from reports.base import Section
 from reports.registry import SectionSpec, sections
-from shared.plugins import by_name
+from shared import plugins
+from shared.plugins import by_name, classes_in_modules
 from stages.base import Stage
 from stages.registry import StageSpec, stages
+from stages.vulnerability_scan.scanners import SCANNERS, VulnScanner
+from stages.vulnerability_scan.scanners.nuclei import NucleiScanner
 
 pytestmark = pytest.mark.pipeline
 
@@ -73,3 +79,26 @@ def test_a_section_spec_carries_its_class_values_frozen():
         assert isinstance(spec.requires, frozenset)
         assert spec.order == spec.section_cls.order
         assert spec.defaults == spec.config_model().model_dump()
+
+
+def test_the_vulnerability_scanners_are_keyed_by_name():
+    assert {"nuclei": NucleiScanner} == SCANNERS
+
+
+def test_a_scanner_module_that_fails_to_import_is_skipped_not_fatal(monkeypatch):
+    real = importlib.import_module
+    broken = "stages.vulnerability_scan.scanners.nuclei"
+
+    def fake_import(name, *args, **kwargs):
+        if name == broken:
+            message = "nuclei scanner is broken"
+            raise RuntimeError(message)
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(plugins.importlib, "import_module", fake_import)
+    found = classes_in_modules(
+        "stages.vulnerability_scan.scanners",
+        Path(scanners_package.__file__).parent,
+        VulnScanner,
+    )
+    assert found == []
