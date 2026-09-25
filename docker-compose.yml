@@ -203,7 +203,9 @@ services:
     volumes: *api-volumes
     env_file:
       - .env
-    command: uv run python -m channels
+    # the venv interpreter directly: `uv run` would re-resolve against the root pyproject.toml the
+    # shared api volume list mounts over /app, and install its dev group at every start
+    command: /app/.venv/bin/python -m channels
     restart: unless-stopped
     depends_on:
       db:
