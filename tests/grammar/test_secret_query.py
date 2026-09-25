@@ -25,13 +25,10 @@ async def _add(
     vendor: str = "Amazon Web Services",
     value: str = "AKIAV",
 ) -> None:
-    sid = estate.scans[scan]
-    target_id = await estate._target_of(sid)
+    ids = estate.row_ids(scan)
     estate.session.add(
         Secret(
-            project_id=estate.project_id,
-            scan_id=sid,
-            target_id=target_id,
+            **ids,
             fingerprint=f"{kind}|{value}",
             kind=kind,
             group=group,
