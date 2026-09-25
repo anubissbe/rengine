@@ -19,6 +19,11 @@ from app.services.project import (
     project_not_found,
     require_project_id,
 )
+from app.services.target_enrichment import (
+    BGP_ELIGIBLE_TYPES,
+    ENRICHMENTS,
+    EnrichmentKind,
+)
 from app.services.target_filters import (
     SignalName,
     SortDir,
@@ -31,7 +36,6 @@ from app.services.target_filters import (
 from shared.enums.activity import ActivityLevel
 from shared.enums.scan import SCAN_OPEN_STATUSES
 from shared.enums.target import TargetType
-from shared.enums.task_status import TaskStatus
 from shared.models import (
     Organization,
     OrganizationSummary,
@@ -83,11 +87,6 @@ from shared.schemas.target_detail import (
 )
 from shared.services import get_or_create_organization, get_or_create_tag, target_seeds
 from shared.services.activity_log import ActivityLogService
-from shared.services.celery_dispatch import (
-    dispatch_dns_lookups,
-    dispatch_ripestat_enrichment,
-    dispatch_whois_lookups,
-)
 from shared.utils.datetime import utc_now
 from shared.utils.validation import (
     normalize_target_value,
@@ -97,9 +96,6 @@ from shared.utils.validation import (
 from tools.dnsx.service import DnsxService
 
 MAX_TARGETS_IMPORT = 500
-
-BGP_ELIGIBLE_TYPES = {TargetType.IP, TargetType.IP_RANGE, TargetType.ASN}
-DNS_ELIGIBLE_TYPES = {TargetType.DOMAIN, TargetType.URL}
 
 
 @dataclass
@@ -314,40 +310,20 @@ class TargetService:
         result = await self.session.execute(query.limit(limit))
         return list(result.scalars().all())
 
-    async def bulk_enrich(self, target_ids: list[UUID], kind: str) -> int:
+    async def bulk_enrich(self, target_ids: list[UUID], kind: EnrichmentKind) -> int:
+        """Queue one enrichment for the targets it applies to; how many were queued."""
+        enrichment = ENRICHMENTS[EnrichmentKind(kind)]
         result = await self.session.execute(
             select(Target).where(Target.id.in_(target_ids))
         )
-        targets = list(result.scalars().all())
-        eligible: list[Target] = []
-
-        for target in targets:
-            if kind == "whois":
-                target.whois_status = TaskStatus.PENDING
-                target.whois_error = None
-                eligible.append(target)
-            elif kind == "dns" and target.target_type in DNS_ELIGIBLE_TYPES:
-                target.dns_status = TaskStatus.PENDING
-                target.dns_error = None
-                eligible.append(target)
-            elif kind == "bgp" and target.target_type in BGP_ELIGIBLE_TYPES:
-                target.bgp_status = TaskStatus.PENDING
-                eligible.append(target)
-            else:
-                continue
-            target.updated_at = utc_now()
-
+        eligible = [t for t in result.scalars().all() if enrichment.applies_to(t)]
+        for target in eligible:
+            enrichment.mark_pending(target)
         await self.session.commit()
 
-        ids = [str(t.id) for t in eligible]
-        if ids:
-            if kind == "whois":
-                dispatch_whois_lookups(ids)
-            elif kind == "dns":
-                dispatch_dns_lookups(ids)
-            else:
-                dispatch_ripestat_enrichment(ids)
-        return len(ids)
+        if eligible:
+            enrichment.dispatch([str(t.id) for t in eligible])
+        return len(eligible)
 
     async def bulk_add_tags(
         self, target_ids: list[UUID], tag_names: list[str], user_id: str
@@ -998,91 +974,51 @@ class TargetService:
         return await self._build_bgp_detail(target)
 
     async def refresh_target_dns(self, target_id: str) -> EnrichmentRefreshResponse:
-        target = await self._get_target_or_404(target_id)
-
-        if target.target_type not in DNS_ELIGIBLE_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"DNS lookup does not apply to {target.target_type.value} targets. "
-                "Domain and URL targets only.",
-            )
-
-        target.dns_status = TaskStatus.PENDING
-        target.dns_error = None
-        target.updated_at = utc_now()
-        await self.session.commit()
-
-        await self._activity.log_async(
-            event=ActivityEvent.TARGET_ENRICHMENT_STARTED,
-            title=f"DNS lookup queued for {target.target_value}",
-            target_id=target.id,
-            project_id=target.project_id,
-        )
-        await self.session.commit()
-
-        dispatch_dns_lookups([str(target.id)])
-
-        return EnrichmentRefreshResponse(
-            target_id=target.id,
-            enrichment_type="dns",
-            status="queued",
-            message=f"DNS lookup queued for {target.target_value}",
-        )
+        return await self.refresh_enrichment(target_id, EnrichmentKind.DNS)
 
     async def refresh_target_whois(self, target_id: str) -> EnrichmentRefreshResponse:
-        target = await self._get_target_or_404(target_id)
-
-        target.whois_status = TaskStatus.PENDING
-        target.whois_error = None
-        target.updated_at = utc_now()
-        await self.session.commit()
-
-        await self._activity.log_async(
-            event=ActivityEvent.TARGET_ENRICHMENT_STARTED,
-            title=f"WHOIS lookup queued for {target.target_value}",
-            target_id=target.id,
-            project_id=target.project_id,
-        )
-        await self.session.commit()
-
-        dispatch_whois_lookups([str(target.id)])
-
-        return EnrichmentRefreshResponse(
-            target_id=target.id,
-            enrichment_type="whois",
-            status="queued",
-            message=f"WHOIS lookup queued for {target.target_value}",
-        )
+        return await self.refresh_enrichment(target_id, EnrichmentKind.WHOIS)
 
     async def refresh_target_bgp(self, target_id: str) -> EnrichmentRefreshResponse:
-        target = await self._get_target_or_404(target_id)
+        return await self.refresh_enrichment(target_id, EnrichmentKind.BGP)
 
-        if target.target_type not in BGP_ELIGIBLE_TYPES:
+    async def refresh_enrichment(
+        self, target_id: str, kind: EnrichmentKind
+    ) -> EnrichmentRefreshResponse:
+        """Queue one enrichment for one target.
+
+        Every database write, the activity entry included, commits before the
+        task is dispatched: the worker reads the pending row and logs its own
+        outcome, so dispatching first could let the outcome land before the
+        "queued" entry, or leave a running task behind a failed request.
+        """
+        enrichment = ENRICHMENTS[kind]
+        target = await self._get_target_or_404(target_id)
+        if not enrichment.applies_to(target):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"BGP enrichment does not apply to {target.target_type.value} targets. "
-                "IP, IP range and ASN targets only.",
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=enrichment.not_applicable(target),
             )
 
-        target.bgp_status = TaskStatus.PENDING
-        target.updated_at = utc_now()
+        enrichment.mark_pending(target)
         await self.session.commit()
 
-        dispatch_ripestat_enrichment([str(target.id)])
-
+        message = enrichment.queued(target)
         await self._activity.log_async(
             event=ActivityEvent.TARGET_ENRICHMENT_STARTED,
-            title=f"BGP enrichment queued for {target.target_value}",
+            title=message,
             target_id=target.id,
             project_id=target.project_id,
         )
         await self.session.commit()
 
+        enrichment.dispatch([str(target.id)])
+
         return EnrichmentRefreshResponse(
             target_id=target.id,
-            enrichment_type="bgp",
+            enrichment_type=kind.value,
             status="queued",
-            message=f"BGP enrichment queued for {target.target_value}",
+            message=message,
         )
 
     async def _get_target_or_404(self, target_id: str) -> Target:
@@ -1595,13 +1531,7 @@ class TargetService:
         if not targets:
             return
 
-        all_ids = [str(t.id) for t in targets]
-        dispatch_whois_lookups(all_ids)
-
-        dns_ids = [str(t.id) for t in targets if t.target_type in DNS_ELIGIBLE_TYPES]
-        if dns_ids:
-            dispatch_dns_lookups(dns_ids)
-
-        bgp_ids = [str(t.id) for t in targets if t.target_type in BGP_ELIGIBLE_TYPES]
-        if bgp_ids:
-            dispatch_ripestat_enrichment(bgp_ids)
+        for enrichment in ENRICHMENTS.values():
+            ids = [str(t.id) for t in targets if enrichment.applies_to(t)]
+            if ids:
+                enrichment.dispatch(ids)
