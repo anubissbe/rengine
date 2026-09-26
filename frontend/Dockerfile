@@ -18,11 +18,15 @@ RUN npm ci
 
 COPY frontend/scripts/fetch-tech-icons.mjs ./scripts/
 
-RUN node scripts/fetch-tech-icons.mjs
+# the ~7,000 icons are fetched in their own cached layer but kept out of static/ during the
+# build, so adapter-node does not gzip and brotli each of them; they join the build output
+# afterwards and are served as the minified SVGs they are
+RUN node scripts/fetch-tech-icons.mjs && mv static/tech-icons /tech-icons
 
 COPY frontend/. .
 
-RUN npm run build
+# the build peaks near 3 GB, past the ~1.6 GB heap node 22 picks in a container
+RUN NODE_OPTIONS=--max-old-space-size=4096 npm run build && mv /tech-icons build/client/tech-icons
 
 
 ##################################################################
