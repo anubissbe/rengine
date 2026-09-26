@@ -17,6 +17,9 @@ concurrency:
 # Every check is a Makefile target, so `make lint` and `make test` run exactly
 # what CI runs. The package list and the ruff pin live in the Makefile and
 # pyproject.toml, not here.
+
+permissions:
+  contents: read
 jobs:
   lint:
     name: 🧹 Lint
