@@ -92,7 +92,7 @@ MODELS: tuple[ModelSpec, ...] = (
         1_000_000,
         True,
         True,
-        "Default model.",
+        "Previous Opus.",
     ),
     ModelSpec(
         "claude-opus-5-5",
@@ -103,7 +103,7 @@ MODELS: tuple[ModelSpec, ...] = (
         1_000_000,
         True,
         True,
-        "Newest Opus, lower price than Opus 5.",
+        "Default model. Newest Opus, lower price than Opus 5.",
     ),
     ModelSpec(
         "claude-fable-5-1",
@@ -213,7 +213,7 @@ MODELS: tuple[ModelSpec, ...] = (
 MODEL_BY_ID: dict[str, ModelSpec] = {m.id: m for m in MODELS}
 
 DEFAULT_MODEL: dict[str, str] = {
-    AIProvider.ANTHROPIC.value: "claude-opus-5",
+    AIProvider.ANTHROPIC.value: "claude-opus-5-5",
     AIProvider.OPENAI.value: "gpt-6-sol",
     AIProvider.AZURE_OPENAI.value: "gpt-6-sol",
     AIProvider.GOOGLE.value: "gemini-3.8-flash",
