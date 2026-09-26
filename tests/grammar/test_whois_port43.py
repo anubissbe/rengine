@@ -2,8 +2,12 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from tools.whois.parser import parse_domain_response
 from tools.whois.providers.port43 import to_whoisit_shape
+
+pytestmark = pytest.mark.grammar
 
 BE_RESPONSE = """\
 % .be Whois Server 6.1
