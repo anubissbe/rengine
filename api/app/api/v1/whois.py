@@ -2,7 +2,7 @@ import uuid as _uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi_pagination.ext.sqlalchemy import paginate
+from fastapi_pagination.ext.sqlalchemy import apaginate
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -173,7 +173,7 @@ async def list_whois_records(
         registrar_name=registrar_name,
         country=country,
     )
-    return await paginate(session, query)
+    return await apaginate(session, query)
 
 
 @router.get(
